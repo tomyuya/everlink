@@ -56,3 +56,16 @@ def load_all(data_dir: str | Path = DATA_DIR) -> list[LinkSlot]:
     for site in SITES:
         out.extend(load_slots(site, data_dir))
     return out
+
+
+def extract_slots(site: str, **kwargs) -> list[LinkSlot]:
+    """Unified adapter entrypoint (spec §4.1): ``extract_slots(site) -> LinkSlot[]``.
+
+    * One of the three first-party site names -> read its Phase-A CSV snapshot.
+    * Anything else (a page URL, a sitemap URL, or a list of URLs) -> the
+      read-only ``generic`` adapter, which crawls and NEVER writes back.
+    """
+    if site in SITES:
+        return load_slots(site)
+    from .generic import extract_slots_generic
+    return extract_slots_generic(site, **kwargs)

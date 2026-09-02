@@ -181,32 +181,9 @@ def _stealthy_headers() -> dict[str, str]:
     }
 
 
-def fetch_page(url: str, *, timeout: float = 20.0, engine: str = "auto",
-               headers: Optional[dict] = None) -> tuple[Optional[int], str, Optional[str]]:
-    """Fetch a page's HTML. Returns (status, html, error).
-
-    engine: "auto" tries Scrapling's stealthy fetch when installed, else httpx;
-    "httpx" forces httpx; "scrapling" forces Scrapling. Any transport failure is
-    returned as (None, "", error_text) so callers can flag needs_human_recheck
-    rather than guessing.
-    """
-    hdrs = headers or _stealthy_headers()
-
-    if engine in ("auto", "scrapling"):
-        try:
-            from scrapling.fetchers import StealthyFetcher  # type: ignore
-
-            resp = StealthyFetcher.fetch(url, timeout=int(timeout * 1000))
-            status = getattr(resp, "status", 200)
-            return status, resp.html or "", None
-        except ImportError:
-            if engine == "scrapling":
-                return None, "", "scrapling not installed"
-        except Exception as e:  # noqa: BLE001
-            if engine == "scrapling":
-                return None, "", f"scrapling fetch failed: {type(e).__name__}: {e}"
-            # auto: fall through to httpx
-
+def _fetch_httpx(url: str, timeout: float,
+                 hdrs: dict) -> tuple[Optional[int], str, Optional[str]]:
+    """Fast, quiet httpx GET (the common case)."""
     try:
         import httpx
 
@@ -216,6 +193,57 @@ def fetch_page(url: str, *, timeout: float = 20.0, engine: str = "auto",
             return r.status_code, r.text, None
     except Exception as e:  # noqa: BLE001
         return None, "", f"httpx fetch failed: {type(e).__name__}: {e}"
+
+
+def _fetch_scrapling(url: str, timeout: float) -> tuple[Optional[int], str, Optional[str]]:
+    """Stealthy browser fetch — defeats bot-walls. Silences Scrapling's loguru."""
+    try:
+        from loguru import logger as _loguru  # type: ignore
+        _loguru.disable("scrapling")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from scrapling.fetchers import StealthyFetcher  # type: ignore
+
+        resp = StealthyFetcher.fetch(url, timeout=int(timeout * 1000))
+        return getattr(resp, "status", 200), resp.html or "", None
+    except ImportError:
+        return None, "", "scrapling not installed"
+    except Exception as e:  # noqa: BLE001
+        return None, "", f"scrapling fetch failed: {type(e).__name__}: {e}"
+
+
+def fetch_page(url: str, *, timeout: float = 20.0, engine: str = "auto",
+               headers: Optional[dict] = None) -> tuple[Optional[int], str, Optional[str]]:
+    """Fetch a page's HTML. Returns (status, html, error).
+
+    engine:
+      * "httpx"      — force the fast, quiet httpx GET.
+      * "scrapling"  — force the stealthy browser fetch.
+      * "auto" (default) — httpx first (cheap, quiet); escalate to Scrapling
+        stealthy ONLY when httpx fails or the body looks like a bot-wall. This
+        keeps L2 fast and log-clean while preserving the spec §4.1 stealthy
+        fallback exactly where it earns its cost.
+    Any transport failure returns (None, "", error_text) so callers flag
+    needs_human_recheck rather than guessing.
+    """
+    hdrs = headers or _stealthy_headers()
+
+    if engine == "scrapling":
+        return _fetch_scrapling(url, timeout)
+    if engine == "httpx":
+        return _fetch_httpx(url, timeout, hdrs)
+
+    # engine == "auto": cheap httpx first, stealthy escalation only when needed.
+    status, html, err = _fetch_httpx(url, timeout, hdrs)
+    if err or not html:
+        s2, h2, _e2 = _fetch_scrapling(url, timeout)
+        return (s2, h2, None) if h2 else (status, html, err)
+    if parse_product_page(html).verdict == "blocked":
+        s2, h2, _e2 = _fetch_scrapling(url, timeout)
+        if h2:
+            return s2, h2, None
+    return status, html, None
 
 
 def probe_l2(url: str, *, claimed_price: Optional[str] = None,

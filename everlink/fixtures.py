@@ -64,6 +64,47 @@ HOMEPAGE_HTML = _PAGE.format(
           '<a href="/deals">Today\'s Deals</a></div>'),
 )
 
+# A "real blog post" with outbound links of each class, for the generic adapter
+# (spec §4.1): commercial (Amazon affiliate w/ tag), reference (Wikipedia),
+# internal (/about), plus mailto + bare-fragment anchors that must be skipped.
+BLOG_POST_HTML = _PAGE.format(
+    title="My Blog | Best Headphones 2026",
+    body=(
+        '<article><h1>Best Headphones 2026</h1>'
+        '<p>Our top pick is the <a href="https://www.amazon.com/dp/B0TEST?tag=everlink-20">'
+        'Sony WH-1000XM5 on Amazon</a> - superb noise cancellation.</p>'
+        '<p>For background, see <a href="https://en.wikipedia.org/wiki/Headphones">'
+        'the Wikipedia article on headphones</a>.</p>'
+        '<p>Read <a href="/about">about us</a> or '
+        '<a href="mailto:hi@myblog.example">email us</a>. Jump to <a href="#specs">specs</a>.</p>'
+        '</article>'
+    ),
+)
+BLOG_POST2_HTML = _PAGE.format(
+    title="My Blog | AliExpress Finds",
+    body=(
+        '<article><h1>AliExpress Finds</h1>'
+        '<p>Grab this <a href="https://s.click.aliexpress.com/e/_deadaff?aff=xyz">gadget deal</a>.</p>'
+        '<p>Also a <a href="https://example.org/reference/page">reference link</a>.</p>'
+        '</article>'
+    ),
+)
+ROBOTS_TXT = "User-agent: *\nDisallow:\n"
+
+# A same-host "link farm" pointing at every scenario page, so scan_site.py can be
+# smoked end-to-end hermetically (--include-internal): dead / ok / unavailable /
+# price-anomaly / a dropped-tag affiliate redirect — no live external sites.
+LINK_FARM_HTML = _PAGE.format(
+    title="Link Farm",
+    body=(
+        '<div><a href="/dead">a dead link</a> '
+        '<a href="/ok">a live product</a> '
+        '<a href="/unavailable">an unavailable offer</a> '
+        '<a href="/price-anomaly">a repriced item</a> '
+        '<a href="/affiliate/deal?tag=everlink-20">an affiliate deal</a></div>'
+    ),
+)
+
 # path -> (status, html)
 PAGES = {
     "/ok": (200, OK_HTML),
@@ -72,8 +113,30 @@ PAGES = {
     "/blocked": (200, BLOCKED_HTML),
     "/dead": (404, DEAD_HTML),
     "/disclosure-dead": (404, DEAD_HTML),
+    "/blog/post1": (200, BLOG_POST_HTML),
+    "/blog/post2": (200, BLOG_POST2_HTML),
+    "/link-farm": (200, LINK_FARM_HTML),
+    "/robots.txt": (200, ROBOTS_TXT),
     "/": (200, HOMEPAGE_HTML),
 }
+
+# Sitemap routes are generated per-request so their <loc>s point back at whatever
+# ephemeral port the test server bound (spec §4.1 generic-adapter fixtures).
+SITEMAP_PATHS = {"/sitemap.xml", "/sitemap-index.xml", "/sub-sitemap.xml"}
+
+
+def _sitemap_urlset(base: str, locs: list[str]) -> str:
+    items = "".join(f"<url><loc>{l}</loc></url>" for l in locs)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f'{items}</urlset>')
+
+
+def _sitemap_index_xml(base: str, subs: list[str]) -> str:
+    items = "".join(f"<sitemap><loc>{s}</loc></sitemap>" for s in subs)
+    return ('<?xml version="1.0" encoding="UTF-8"?>'
+            '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f'{items}</sitemapindex>')
 
 # Redirect scenarios: path -> (status, Location builder given query params).
 # /affiliate/deal?tag=everlink-20 -> 302 to "/" (the tag is silently dropped),
@@ -89,10 +152,11 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
     server_version = "EverLinkFixture/1.0"
 
-    def _send(self, status: int, body: str) -> None:
+    def _send(self, status: int, body: str,
+              content_type: str = "text/html; charset=utf-8") -> None:
         raw = body.encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -108,6 +172,17 @@ class FixtureHandler(BaseHTTPRequestHandler):
             self.send_header("Location", location)
             self.send_header("Content-Length", "0")
             self.end_headers()
+            return
+
+        if path in SITEMAP_PATHS:
+            base = f"http://{self.headers.get('Host') or HOST}"
+            if path == "/sitemap.xml":
+                body = _sitemap_urlset(base, [base + "/blog/post1", base + "/blog/post2"])
+            elif path == "/sitemap-index.xml":
+                body = _sitemap_index_xml(base, [base + "/sub-sitemap.xml"])
+            else:  # /sub-sitemap.xml
+                body = _sitemap_urlset(base, [base + "/blog/post1"])
+            self._send(200, body, content_type="application/xml; charset=utf-8")
             return
 
         status, html = PAGES.get(path, (200, OK_HTML))
