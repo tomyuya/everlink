@@ -185,6 +185,27 @@ class FixtureHandler(BaseHTTPRequestHandler):
             self._send(200, body, content_type="application/xml; charset=utf-8")
             return
 
+        # Prefix routes for the Evals suite (spec §8): many DISTINCT paths share
+        # one scenario page, so each eval case gets a unique URL (hence a unique
+        # decision-card merge key) while exercising the same detection outcome.
+        # Exact routes above still win; these results are identical for the bare
+        # paths, so existing tests are unaffected.
+        if path.startswith("/dead"):
+            self._send(404, DEAD_HTML)
+            return
+        if path.startswith("/price-anomaly"):
+            self._send(200, PRICE_ANOMALY_HTML)
+            return
+        if path.startswith("/unavailable"):
+            self._send(200, UNAVAILABLE_HTML)
+            return
+        if path.startswith("/affiliate/deal"):
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
         status, html = PAGES.get(path, (200, OK_HTML))
         self._send(status, html)
 
