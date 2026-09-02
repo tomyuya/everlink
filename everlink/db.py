@@ -21,6 +21,16 @@ import psycopg
 
 from .model import CheckResult, LinkSlot
 
+# Auto-load everlink/.env so the operator's DSN survives shells that mangle the
+# '&' inside Neon query params. Silent no-op if python-dotenv is absent (real
+# environment variables still work). Never overrides already-set env vars.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 # Env vars whose DB hosts are automatically write-forbidden for EverLink.
 SOURCE_DSN_VARS = (
     "AETHELGEM_DATABASE_URL", "SANDCART_DATABASE_URL", "HOTDEALS_DATABASE_URL",
