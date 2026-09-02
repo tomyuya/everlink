@@ -12,6 +12,7 @@ The classification logic is split into pure functions (`analyze_chain`,
 """
 from __future__ import annotations
 
+import os
 import time
 from urllib.parse import urlparse, parse_qs
 
@@ -41,6 +42,20 @@ DEFAULT_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+def _trust_env() -> bool:
+    """Whether httpx honors ambient proxy env / OS proxy settings.
+
+    Default False: a link-rot prober must observe what the merchant returns to a
+    *direct* client, and the fixture-based Evals/demo run against a localhost
+    server that a machine-level proxy would otherwise 502 (masking the real
+    verdict). Set EVERLINK_HTTP_TRUST_ENV=1 to route through a required
+    corporate/CI egress proxy.
+    """
+    return os.environ.get("EVERLINK_HTTP_TRUST_ENV", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
 
 
 def _aff_params(url: str) -> set[str]:
@@ -122,7 +137,8 @@ def probe_url(url: str, slot_id: str = "", *, timeout: float = 15.0,
     status: int | None = None
     current = url
     own = client is None
-    cli = client or httpx.Client(follow_redirects=False, headers=hdrs, timeout=timeout)
+    cli = client or httpx.Client(follow_redirects=False, headers=hdrs, timeout=timeout,
+                                 trust_env=_trust_env())
     try:
         for _ in range(max_hops):
             try:
@@ -156,7 +172,8 @@ def probe_slots(slots: list[LinkSlot], *, rate_delay: float = 1.0,
                 timeout: float = 15.0, max_hops: int = 6,
                 limit: int | None = None):
     """Probe slots politely: <=1 request per link, `rate_delay` seconds apart."""
-    client = httpx.Client(follow_redirects=False, headers=DEFAULT_HEADERS, timeout=timeout)
+    client = httpx.Client(follow_redirects=False, headers=DEFAULT_HEADERS, timeout=timeout,
+                          trust_env=_trust_env())
     try:
         for i, slot in enumerate(slots):
             if limit is not None and i >= limit:
