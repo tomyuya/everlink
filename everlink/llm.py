@@ -20,6 +20,7 @@ blocked on a cloud dependency.
 """
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncGenerator, Callable
 from typing import Any, TypeVar
@@ -109,6 +110,29 @@ class StubModel(Model):
         return self.config
 
     # -- streaming ----------------------------------------------------------
+    def _structured_payload(self, prompt: Any) -> dict[str, Any]:
+        data = self._structured(prompt) if callable(self._structured) else self._structured
+        return data or {}
+
+    @staticmethod
+    def _structured_output_tool(tool_specs: list[ToolSpec] | None) -> str | None:
+        """Name of Strands' injected StructuredOutputTool, if present (spec §6).
+
+        When an agent is invoked with ``structured_output_model=SomeModel``,
+        Strands adds a tool named after the model whose description contains the
+        marker ``StructuredOutputTool`` and forces the model to call it. We
+        detect that here so ``stream()`` can satisfy the modern path offline.
+        """
+        for spec in tool_specs or []:
+            if isinstance(spec, dict):
+                name, desc = spec.get("name"), spec.get("description", "") or ""
+            else:
+                name = getattr(spec, "name", None)
+                desc = getattr(spec, "description", "") or ""
+            if name and "StructuredOutputTool" in desc:
+                return name
+        return None
+
     async def stream(
         self,
         messages: Any,
@@ -119,11 +143,22 @@ class StubModel(Model):
         **kwargs: Any,
     ) -> AsyncGenerator[StreamEvent, None]:
         self.calls += 1
+        so_tool = self._structured_output_tool(tool_specs)
         yield {"messageStart": {"role": "assistant"}}
-        yield {"contentBlockStart": {"start": {}}}
-        yield {"contentBlockDelta": {"delta": {"text": self._text}}}
-        yield {"contentBlockStop": {}}
-        yield {"messageStop": {"stopReason": "end_turn"}}
+        if so_tool:
+            # Emit a toolUse carrying the scripted payload so the modern
+            # `agent(prompt, structured_output_model=...)` path resolves offline.
+            payload = json.dumps(self._structured_payload(messages))
+            yield {"contentBlockStart": {
+                "start": {"toolUse": {"toolUseId": "stub-so-1", "name": so_tool}}, "index": 0}}
+            yield {"contentBlockDelta": {"delta": {"toolUse": {"input": payload}}, "index": 0}}
+            yield {"contentBlockStop": {"index": 0}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+        else:
+            yield {"contentBlockStart": {"start": {}}}
+            yield {"contentBlockDelta": {"delta": {"text": self._text}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
         yield {
             "metadata": {
                 "usage": {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
