@@ -1,0 +1,46 @@
+# --- secrets: NEVER commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+aws_credentials*
+credentials.json
+
+# --- exported data snapshots (contain production content; keep local only) ---
+data/*.csv
+data/*.jsonl
+!data/slots_summary.json
+!data/.gitkeep
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- agent runtime / eval artifacts ---
+runs/
+*.sqlite
+*.db
+otel-*.json
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- local scratch (kept out of the public repo) ---
+_*out.txt
+_commit_msg.txt
+probe_*.py
+discover_schema.py
+scripts/__pycache__/

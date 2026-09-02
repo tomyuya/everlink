@@ -1,0 +1,30 @@
+{
+  "aethelgem": {
+    "slots": 15795,
+    "by_slot_type": {
+      "component": 15772,
+      "reference": 19,
+      "commercial": 4
+    },
+    "protected": 0
+  },
+  "sandcart": {
+    "slots": 76,
+    "by_slot_type": {
+      "internal": 76
+    },
+    "protected": 0
+  },
+  "hotdeals": {
+    "slots": 7605,
+    "by_slot_type": {
+      "component": 7602,
+      "reference": 2,
+      "commercial": 1
+    },
+    "protected": 0
+  },
+  "_total": {
+    "slots": 23476
+  }
+}
