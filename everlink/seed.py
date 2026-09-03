@@ -49,7 +49,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from . import cards as cards_mod
-from . import db, queue, writer
+from . import db, detect, queue, writer
 from .agents import SlotProposal
 from .model import CheckResult, Decision, LinkSlot, Proposal, RedirectHop
 
@@ -83,33 +83,42 @@ _AEG_PRODUCTS = [
 ]
 _TAG = "aethelgem-20"
 
-# scenario-verdict label -> (l1_status, l2_verdict, l2_evidence, redirect_chain_kind).
-# A soft-404 ("Currently unavailable") is its own label but its FINAL verdict is 'dead'
-# (model.Verdict has no 'unavailable'); _FINAL below maps labels to real final verdicts.
+# scenario-verdict label -> (l1_verdict, l1_status, l2_verdict, l2_evidence, chain_kind).
+# The FINAL verdict is NEVER hardcoded here: it is folded from (l1_verdict, l2_verdict) by
+# the REAL production oracle ``detect.combine_verdict``, so a seeded CheckResult carries
+# exactly the verdict the live L1+L2 pyramid would — no drift between the replay and the
+# detector the Evals score. ``l2_verdict`` is None when L1 is conclusive and detect SKIPS L2
+# (detect._L2_ESCALATE): a 404 dead link or a dropped-tag affiliate redirect. A soft-404
+# ("Currently unavailable") is L1-healthy, so L2 runs and combine_verdict folds
+# 'unavailable' -> 'offer_changed' (the page lives, the offer died) — NOT 'dead'.
 _VERDICTS = {
-    "dead": (404, "dead", "L2 parse: 'Page Not Found' / no #dp-container; HTTP 404.", None),
-    "dead_soft404": (200, "unavailable",
+    "dead": ("dead", 404, None,
+             "L1: HTTP 404; the redirect chain ends at a 'Page Not Found' body.", None),
+    "dead_soft404": ("healthy", 200, "unavailable",
                      "L2 parse: #availability = 'Currently unavailable'; soft-404 (HTTP 200 "
-                     "but no buy box) — classified final 'dead'.", None),
-    "program_ended": (302, None,
+                     "but no buy box) — the page lives, the offer died.", None),
+    "program_ended": ("program_ended", 302, None,
                       "L1 redirect-chain: affiliate hop 302 dropped ?tag= and landed the "
                       "store homepage — the tracking partnership is gone.", "affiliate"),
-    "offer_changed": (200, "price_anomaly",
+    "offer_changed": ("healthy", 200, "price_anomaly",
                       "L2 parse: price block jumped $199.00 -> $349.00 vs the claimed "
                       "'under $200' in the surrounding sentence.", None),
-    "healthy": (200, "ok",
+    "healthy": ("healthy", 200, "ok",
                 "L2 parse: #dp-container present, in stock, price matches the claim.", None),
-    "needs_human_recheck": (200, "blocked",
+    "needs_human_recheck": ("healthy", 200, "blocked",
                             "L2 parse: bot-wall / captcha; inconclusive — flagged for human "
                             "recheck, never auto-fixed.", None),
 }
 
-# scenario-verdict label -> the CheckResult.final_verdict it is recorded as (spec §5 enum).
-_FINAL = {
-    "dead": "dead", "dead_soft404": "dead", "program_ended": "program_ended",
-    "offer_changed": "offer_changed", "healthy": "healthy",
-    "needs_human_recheck": "needs_human_recheck",
-}
+
+def _final_of(label: str) -> str:
+    """The final_verdict for a scenario label, folded by the REAL ``detect`` oracle.
+
+    Single source of truth: this is literally ``detect.combine_verdict`` over the label's
+    (l1_verdict, l2_verdict), so the replay can never disagree with production detection.
+    """
+    l1_verdict, _status, l2_verdict, _ev, _chain = _VERDICTS.get(label, _VERDICTS["dead"])
+    return detect.combine_verdict(l1_verdict, l2_verdict)
 
 
 def _dt(hours: float, now: datetime) -> datetime:
@@ -169,7 +178,7 @@ def _aeg_scenarios() -> list[_Scen]:
         is_rb = (i == 37)
         fix_asin = f"B0GONE{i:04d}" if is_rb else f"B0FIX{i:04d}"
         new_url = f"https://www.amazon.com/dp/{fix_asin}?tag={_TAG}"
-        l1, l2, l2e, _chain = _VERDICTS[verdict]
+        _l1v, l1, l2, l2e, _chain = _VERDICTS[verdict]
         out.append(_Scen(
             site=_WRITEBACK_SITE, article_id=f"demo-{i:03d}", article_title=title,
             block_id=f"b{i}", block_type=block_type, slot_type="component",
@@ -279,13 +288,13 @@ def _slot_of(s: _Scen, idx: int) -> LinkSlot:
 
 def _check_of(s: _Scen, slot_id: str, *, verdict: Optional[str] = None) -> CheckResult:
     v = verdict or s.verdict
-    l1, l2, l2e, chain_kind = _VERDICTS.get(v, _VERDICTS["dead"])
+    _l1v, l1, l2, l2e, chain_kind = _VERDICTS.get(v, _VERDICTS["dead"])
     chain: list[RedirectHop] = []
     if chain_kind == "affiliate":
         chain = [RedirectHop(url=s.url, status=302),
                  RedirectHop(url="https://www.amazon.example/", status=200)]
     return CheckResult(slot_id=slot_id, l1_status=l1, redirect_chain=chain,
-                       l2_verdict=l2, l2_evidence=l2e, final_verdict=_FINAL.get(v, v))
+                       l2_verdict=l2, l2_evidence=l2e, final_verdict=_final_of(v))
 
 
 def _proposal_of(s: _Scen) -> Proposal:
@@ -335,7 +344,7 @@ class SeedPlan:
         protected = 0
         for sc in self.scenarios:                 # order-independent (slots/scenarios differ)
             by_site[sc.site] = by_site.get(sc.site, 0) + 1
-            fv = _FINAL.get(sc.verdict, sc.verdict)
+            fv = _final_of(sc.verdict)
             by_verdict[fv] = by_verdict.get(fv, 0) + 1
             protected += int(sc.protected)
         approved_by_human = sum(1 for sc in self.scenarios if sc.human == "approve")

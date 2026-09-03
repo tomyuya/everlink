@@ -215,8 +215,22 @@ def test_build_seed_hits_spec_anchor_counts():
 def test_build_seed_site_and_verdict_distribution():
     s = seed.build_seed(_FIXED).summary()
     assert s["by_site"] == {"aethelgem": 39, "hotdeals": 1, "sandcart": 1}
-    assert s["by_verdict"] == {"dead": 35, "program_ended": 5, "offer_changed": 1}
+    # the 2 soft-404 slots fold to 'offer_changed' via the REAL detect oracle (page lives,
+    # offer died), so offer_changed = 1 price-drift + 2 soft-404 = 3; dead = 35 - 2 = 33.
+    assert s["by_verdict"] == {"dead": 33, "program_ended": 5, "offer_changed": 3}
     assert s["protected_slots"] == 1              # the affiliate-disclosure block
+
+
+def test_final_verdict_mapping_matches_the_real_detector():
+    """The replay must never drift from production detection: every label's final_verdict
+    is literally ``detect.combine_verdict`` over its (l1_verdict, l2_verdict)."""
+    from everlink import detect
+    for label, spec in seed._VERDICTS.items():
+        l1_verdict, _status, l2_verdict = spec[0], spec[1], spec[2]
+        assert seed._final_of(label) == detect.combine_verdict(l1_verdict, l2_verdict), label
+    # the soft-404 is the case that a hardcoded map got wrong: it is 'offer_changed', not 'dead'
+    assert seed._final_of("dead_soft404") == "offer_changed"
+    assert seed._final_of("dead") == "dead"
 
 
 def test_build_seed_is_deterministic():
