@@ -11,6 +11,10 @@ It is not another broken-link *reporter* — it is a link *steward*.
 > Built for the **AWS "Agents for Humans" Hackathon** (Professional Agents track)
 > with the **Strands Agents SDK** and **Amazon Bedrock**.
 
+**Docs:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (diagrams) · [`EVALS_REPORT.md`](EVALS_REPORT.md)
+(eval evidence) · [`DEPLOYMENT.md`](DEPLOYMENT.md) (runbook) · [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md)
+(phase gate).
+
 ---
 
 ## The problem
@@ -43,20 +47,24 @@ only surfaces when there's a real decision to make."* EverLink embodies this:
 1. **Autonomous** — a nightly cron scans every link slot, probes it, and drafts a fix proposal. No human present.
 2. **Surfaces** — proposals are aggregated into decision cards and *pushed* to you (email / Telegram). "It surfaces as a notification, not an app."
 3. **Human-in-the-loop** — the only screen you open is a minimal approval inbox. Approve, reject (with a reason the agent remembers), or batch-approve low-risk fixes.
-4. **Executes + verifies** — approved fixes are written back (snapshot first), then `verify_fix` re-probes to confirm the link is genuinely alive again.
+4. **Executes + verifies** — approved fixes are written back (snapshot first), then `verify_fix` re-probes to confirm the link is genuinely alive again. If it is not, the writer rolls back and dead-letters the decision.
 
 ## Architecture
+
+> Full Mermaid diagrams — system context, nightly pipeline, agent topology, detection
+> pyramid, write-back safety, and deployment — are in **[`ARCHITECTURE.md`](ARCHITECTURE.md)**
+> (rendered natively by GitHub). The sketch below is the 30-second version.
 
 ```
 [cron / AgentCore schedule]
         |
         v
  Orchestrator Agent (Strands)
-   |-- Scanner Agent -- tools: extract_slots(adapter), http_probe, page_parse
+   |-- Scanner Agent -- tools: extract_slots(adapter), http_probe (L1), page_parse (L2)
    |        | LinkSlot[] + CheckResult[]
    |        v
-   |-- Judge Agent --- tools: find_alternatives, draft_proposal
-   |        | Proposal[] (Structured Output / Pydantic)
+   |-- Judge Agent --- tool: find_alternatives
+   |        | Proposal (Structured Output / Pydantic), gated by steering hooks
    |        v
    |-- Push layer (Resend email / Telegram) -- morning brief + decision cards
    |-- Decision Board (minimal inbox, read-only public view) <-- Interrupt: approve/reject
@@ -69,28 +77,110 @@ only surfaces when there's a real decision to make."* EverLink embodies this:
 ```
 
 - **Multi-agent as an Agent-as-Tool pipeline** (Orchestrator → Scanner → Judge → Writer). We deliberately do *not* use a Swarm: the task is a sequential dependency chain, not peer exploration.
-- **Detection pyramid** — L1 HTTP status + redirect-chain analysis (an affiliate hop that loses its tracking parameter ⇒ program ended); L2 stealth page parse (price block gone / "Currently unavailable" / out-of-stock). No product API is used (RapidAPI / RainForest / Amazon PA-API are all discontinued for us). Anything blocked or times out is flagged `needs_human_recheck` — the agent knows its limits and never fabricates a result.
+- **Detection pyramid** — L1 HTTP status + redirect-chain analysis (an affiliate hop that loses its tracking parameter ⇒ program ended); L2 stealth page parse (price block gone / "Currently unavailable" / out-of-stock). L2 is spent only where L1 is inconclusive. No product API is used (RapidAPI / RainForest / Amazon PA-API are all discontinued for us). Anything blocked or that times out is flagged `needs_human_recheck` — the agent knows its limits and never fabricates a result.
 - **Steering policies** (the creativity core):
   - `DisclosurePolicy` — affiliate-disclosure text is structurally immune; blocks containing disclosure keywords are `protected=1` and no write action may touch them.
   - `EditorialPolicy` — a rewritten sentence must keep (or explicitly downgrade) the original factual claim; no cross-sentence rewrites.
   - `ScopePolicy` — reference slots may not be `REPLACE_URL`; `DROP_BLOCK` only for incidental roles.
   - `WritePolicy` (Hooks) — any Writer tool call must carry an approved `decision_id`, else it is refused.
-- **Interrupt, two tracks** — a synchronous track for the live demo, and an asynchronous durable decision-queue track for production. Same `Proposal` schema and write-gate on both.
+- **Interrupt, two tracks** — a synchronous gate for the live demo, and an asynchronous durable decision-queue worker for production. Same `Proposal` schema and write-gate on both.
 
 ## Strands Agents SDK features used
 
 | Feature | Where |
 |---|---|
-| `@tool` | scan / detect / write-back tools |
+| `@tool` | `extract_slots` / `http_probe` / `page_parse` / `find_alternatives`; Writer's `snapshot_block` / `apply_fix` / `verify_fix` / `rollback` |
 | Multi-agent (Agent-as-Tool) | Orchestrator → Scanner → Judge → Writer |
 | Steering | Disclosure / Editorial / Scope policies |
 | Hooks (Before/AfterToolCall) | audit log + write gate |
-| Interrupt | decision-card approval flow |
+| Interrupt | decision-card approval flow (sync gate + durable queue) |
 | Structured Output (Pydantic) | `Proposal` schema |
-| ConversationManager (SlidingWindow) | long nightly runs |
-| Strands Evals | 50-case evaluation suite |
+| ConversationManager (SlidingWindow) | long nightly runs (Writer) |
+| Strands Evals | 50-case evaluation suite → [`EVALS_REPORT.md`](EVALS_REPORT.md) |
 | `BedrockModel` | Claude via Amazon Bedrock |
-| OpenTelemetry | tracing (stretch) |
+| OpenTelemetry | optional tracing (`everlink/tracing.py`) |
+
+## Model providers (Strands "any model")
+
+Every EverLink agent is built as `build_scanner(model)`, `build_judge(model)`,
+`build_writer(conn, model)` — the `model` is **any** `strands.models.Model`, injected at a
+single seam ([`everlink/llm.py`](everlink/llm.py)). Nothing downstream (detection, steering
+hooks, decision queue, writer, evals) knows or cares which provider it is.
+
+Two providers ship in-repo:
+
+| Provider | What it is | When it runs |
+|---|---|---|
+| `llm.get_model()` → `BedrockModel` | real Claude via Amazon Bedrock — the **submission path** | `verify_bedrock.py`, `--judge bedrock`, the production nightly |
+| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 253-test suite, all offline Evals, `--dry-run` |
+
+**The swap experiment.** Because the seam is one injected `Model`, changing provider is a
+one-line change with no pipeline edit:
+
+```python
+from everlink import agents, llm
+from everlink.llm import StubModel
+
+judge = agents.build_judge(llm.get_model())   # real Claude (Bedrock)
+judge = agents.build_judge(StubModel(...))     # offline deterministic (tests / CI)
+```
+
+Within Bedrock the model and region are env-overridable, so you can move between Claude
+variants or cross-region inference profiles with **zero code change**:
+
+```bash
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-5  AWS_REGION=us-east-1  # defaults
+BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4     AWS_REGION=us-west-2  # cheaper / faster
+```
+
+Strands' model layer is fully pluggable, so the same seam accepts any of its providers —
+`AnthropicModel`, `OpenAIModel`, `GeminiModel`, `MistralModel`, `OllamaModel`,
+`LiteLLMModel`, `SageMakerAIModel`, or a `ModelRouter` (`FallbackStrategy` /
+`ClassifierStrategy`) for multi-provider failover. EverLink stays Bedrock-first for the
+submission (spec §6) but is **not** Bedrock-locked.
+
+**Offline proof of provider-independence:** the entire 253-test suite *and* the 50-case
+Evals run on the injected `StubModel`, so the orchestration, steering, hooks, queue, and
+card merge are exercised with no cloud dependency. `scripts/verify_bedrock.py` is the one
+operator step that swaps in real Claude and confirms a live call (creds → model → real
+response); `run_evals --judge bedrock` then scores the REAL Judge with the same harness
+and thresholds.
+
+> **Honesty.** Offline (Stub) results prove detection (real deterministic code) and the
+> guardrail / orchestration plumbing — **not** live LLM judgment quality. Real Judge
+> quality is only scored on Bedrock. Authentication uses the standard AWS credential chain
+> (SSO / profile / environment); set `AWS_REGION` + `BEDROCK_MODEL_ID` in `.env` and never
+> hardcode long-lived keys. Hackathon participants can claim a Builder ID + **$200 AWS
+> credits**.
+
+## Evals (spec §8)
+
+[`scripts/run_evals.py`](scripts/run_evals.py) runs the agent against an in-process fixture
+server with known ground truth — deterministic, offline, no AWS creds. Full numbers and the
+case distribution are in **[`EVALS_REPORT.md`](EVALS_REPORT.md)**.
+
+The **FULL 50-case Phase F set** (stub backend) scores:
+
+| Evaluator | Threshold | Result |
+|---|---|---|
+| detection accuracy (L1+L2 vs ground truth) | ≥ 90% | **50/50 = 100%** |
+| steering violations (vs the policy oracle) | == 0 | **0** |
+| disclosure zero-deletion (hard metric) | == 100% | **100%** |
+| reference zero-`REPLACE_URL` (hard metric) | == 100% | **100%** |
+| duplicate merged to one card (hard metric) | yes | **yes** (41 cards from 42 problem slots) |
+
+```bash
+python scripts/run_evals.py            # 30-case v1 subset
+python scripts/run_evals.py --full     # FULL 50-case Phase F set
+python scripts/run_evals.py --full --trace console   # + OpenTelemetry span tree
+python scripts/run_evals.py --judge bedrock --full   # score the REAL Judge (needs creds)
+```
+
+> **Honesty.** With `judge_backend=stub` the detection figure is **real** (deterministic
+> code, no LLM); the steering / hard-metric figures validate the policy **oracle** and the
+> orchestration plumbing, **not** live LLM judgment (a stub always escalates). The oracle is
+> proven non-vacuous by `test_oracle_catches_a_violating_judge`, which injects a Judge that
+> blindly `REPLACE_URL`s everything and asserts the evaluators flag it.
 
 ## Dataset (Phase A snapshot)
 
@@ -117,7 +207,6 @@ Notes on the snapshot:
 - `protected=0` everywhere is expected: affiliate-disclosure text lives in **site-level fixed components**, which are structurally outside the article-block pool (see `DisclosurePolicy` layer (a)). The disclosure guard still fires on any block that *does* carry disclosure keywords.
 - CSVs are gitignored (production content); only `data/slots_summary.json` is committed.
 
-
 ## Getting started
 
 ```bash
@@ -131,32 +220,42 @@ pip install -r requirements.txt
 # 3. Configure
 copy .env.example .env    # then fill in real values; NEVER commit .env
 
-# 4. Verify the Strands + Bedrock wiring
-python scripts/verify_strands.py
+# 4. Verify the wiring — offline SDK surface, then (with creds) a real Bedrock call
+python scripts/verify_strands.py     # offline: imports, hooks, conversation manager, @tool
+python scripts/verify_bedrock.py     # real: creds -> model -> live Claude call (exit 0/2/3)
 
-# 5. (Phase A) export the read-only LinkSlot snapshot from the three sites
-python scripts/export_slots.py
+# 5. Run the loop OFFLINE (no AWS creds): scan -> detect -> judge on the StubModel
+python -m everlink scan --site aethelgem --limit 20 --judge stub --dry-run
+python -m everlink decisions --status pending --json   # the board's read model
 
-# 6. (pd4) push the decision queue to the operator — Resend email / Telegram.
+# 6. Score the agent (spec §8) — 30-case v1 subset, or the FULL 50-case Phase F set
+python scripts/run_evals.py --full
+
+# 7. Push the queue to the operator — Resend email / Telegram.
 #    --dry-run composes + prints and sends NOTHING. A real push activates a channel
 #    only when its credentials are set (email: RESEND_API_KEY + RESEND_FROM +
 #    EVERLINK_NOTIFY_EMAIL; telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID); with
 #    none set, delivery is honestly reported as "skipped" — never faked.
 python -m everlink notify --brief --dry-run    # compose the morning digest
-python -m everlink notify --dry-run            # risk-route pending cards (low->batch, med/high->immediate)
+python -m everlink notify --dry-run            # risk-route pending cards
+
+# 8. Load the demo dataset (41-problem-slot replay), then drain + report on it
+python scripts/seed_demo.py --dry-run          # show the plan, touch nothing
+python -m everlink worker --once               # apply approved: snapshot -> apply -> verify
+python -m everlink report --days 7             # weekly report (the board /report numbers)
+
+# 9. Approval inbox (Next.js board)
+cd board && npm install && npm run dev         # http://localhost:3000
+
+# 10. (Phase A) export the read-only LinkSlot snapshot from the three sites
+python scripts/export_slots.py
 ```
-
-### AWS / Bedrock auth
-
-EverLink uses `strands.models.BedrockModel`. Authentication flows through the
-standard AWS credential chain (SSO / profile / environment). Set `AWS_REGION`
-and `BEDROCK_MODEL_ID` in `.env`; do **not** hardcode long-lived keys. Hackathon
-participants can apply for the **$200 AWS credits**.
 
 ## Security & secrets
 
 - This repo contains **only** `.env.example`. Real `.env`, credentials, and exported data CSVs are gitignored.
-- All database access is **read-only** (`SET default_transaction_read_only = on` after connect). Write-back happens only through the agent's gated Writer path, and only to AethelGem block content in the hackathon scope.
+- All source-site database access is **read-only** (`SET default_transaction_read_only = on` after connect). Write-back happens only through the agent's gated Writer path, and only to AethelGem block content in the hackathon scope.
+- A write guardrail (`db._assert_writable`) refuses any DSN whose host matches a source-site connection var or the `EVERLINK_FORBIDDEN_HOSTS` deny-list — the production Blue-Neon instance can never be written, even by accident.
 - A `gitleaks`-clean check is part of the submission gate (see `SUBMISSION_CHECKLIST.md`).
 
 ## Scope (non-goals)
