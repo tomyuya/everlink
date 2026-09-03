@@ -1,0 +1,55 @@
+# Keep the agent image slim and secret-free. Only schema.sql + everlink/ + scripts/ +
+# requirements.txt are COPYed in (see Dockerfile); everything below is excluded from the
+# build context so it can never leak into a layer.
+
+# --- VCS / editor / CI ---
+.git
+.gitignore
+.github
+.idea
+.vscode
+.qoder
+
+# --- the Next.js board deploys SEPARATELY to Vercel; never build it into the agent image ---
+board
+
+# --- tests + local eval/telemetry artifacts (not needed at runtime) ---
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+runs
+otel-*.json
+*.sqlite
+*.db
+
+# --- SECRETS: never ship a real .env into an image (platform injects env vars) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+aws_credentials*
+credentials.json
+
+# --- exported production data snapshots (local-only; see .gitignore) ---
+data/*.csv
+data/*.jsonl
+
+# --- python bytecode / packaging ---
+**/__pycache__
+*.py[cod]
+*.egg-info
+.venv
+venv
+
+# --- docs + local scratch (not needed to RUN the agent) ---
+*.md
+LICENSE
+_*
+Dockerfile
+.dockerignore
+railway.json
+railway.toml
+SUBMISSION_CHECKLIST.md
