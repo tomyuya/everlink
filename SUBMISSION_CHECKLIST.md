@@ -14,7 +14,8 @@ click submit on Devpost). Those stay open by design and are the last mile.
 ## Required deliverables
 
 - [ ] (owner) **1. Devpost text description** — covers problem / who it's for / how it works.
-      Draft is written (Phase I prep); pasting it into the Devpost form is the owner step.
+      Draft is written → [`DEVPOST.md`](DEVPOST.md); pasting it into the Devpost form is the
+      owner step.
 - [~] **2. Public repo + MIT LICENSE + README** — README includes setup instructions.
       - [x] `LICENSE` present (MIT, © 2026 tomyuya)
       - [x] `README.md` present with setup + architecture (pg2 · `6baf2dd`)
@@ -23,15 +24,17 @@ click submit on Devpost). Those stay open by design and are the last mile.
       rendered natively by GitHub (pg1 · `de01ec1`).
       - [ ] (owner) also upload it to Devpost's *separate* "Architecture Diagram" field.
 - [ ] (owner) **4. Demo video ≤ 5:00** — pitch covers **problem / who / why** (spec §11
-      storyboard). Script + shot list are drafted (Phase H prep); recording/voice-over is
-      the owner step.
+      storyboard). Script + shot list are drafted → [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md);
+      recording/voice-over is the owner step.
 - [ ] (owner) **5. AWS Builder ID** — registered, and **$200 credits** claimed.
 - [ ] (owner) **6. Live demo link** *(bonus)* — deploy scaffold is ready
       ([`DEPLOYMENT.md`](DEPLOYMENT.md): Vercel board + Neon + Railway/AgentCore cron,
       pf1 · `9f05e30`; seed dataset pf2 · `723668b` keeps the inbox non-empty). The actual
       deploy + URL is the owner step.
 - [ ] (owner) **7. builder.aws.com blog post** *(bonus)* — title **must contain "Agents for
-      Humans"**. Draft is written (Phase I prep); publishing is the owner step.
+      Humans"**. Draft is written → [`BLOG_DRAFT.md`](BLOG_DRAFT.md) (title: *"You Approve
+      Decisions, Not Links — Building EverLink for the 'Agents for Humans' Hackathon"*);
+      publishing is the owner step.
 
 ## 8. Secrets zero-leak audit (blocking) — ✅ PASS
 
@@ -74,8 +77,8 @@ click submit on Devpost). Those stay open by design and are the last mile.
 - [x] **E** (9/9): Writer write-back (`3d47371`) · **verify_fix** + snapshot rollback (`4cf9de6`) · hooks audit · weekly report (`b9a6f5a`).
 - [x] **F** (9/10): deploy scaffold (`9f05e30`) · **seed dataset** (`723668b`/`e6fa4e9`) · Evals full 50 + OTel tracing (`4e100db`). *(Live deploy + URL = owner, pending.)*
 - [x] **G** (9/11): Architecture Diagram (`de01ec1`) · README (`6baf2dd`) · license/submission cross-check + secrets audit (this file).
-- [ ] (owner) **H** (9/12): Demo video recording — script/shot list drafted.
-- [ ] (owner) **I** (9/13): builder.aws.com blog · Devpost submission — both texts drafted; publish/submit is the owner step.
+- [ ] (owner) **H** (9/12): Demo video recording — script/shot list drafted ([`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)).
+- [ ] (owner) **I** (9/13): builder.aws.com blog ([`BLOG_DRAFT.md`](BLOG_DRAFT.md)) · Devpost submission ([`DEVPOST.md`](DEVPOST.md)) — both texts drafted; publish/submit is the owner step.
 - [ ] **Buffer** (9/14): bug fixes / community release.
 
 ---
