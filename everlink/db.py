@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 import psycopg
@@ -170,3 +171,29 @@ def count_slots(conn, site: str | None = None) -> int:
         else:
             cur.execute("SELECT COUNT(*) FROM link_slots")
         return cur.fetchone()[0]
+
+
+def insert_audit(conn, agent: str, event: str, payload: str | None = None) -> None:
+    """Append one row to audit_log (spec §5).
+
+    ``event`` is one of: tool_call | tool_result | steering_guide | steering_cancel
+    | interrupt | write | rollback. Used by the Phase-D ``audit`` hook (pd1) and
+    every later write/rollback path — the audit trail is append-only.
+    """
+    _assert_writable(conn.info.dsn or "")
+    sql = "INSERT INTO audit_log (agent, event, payload) VALUES (%s, %s, %s)"
+    with conn.cursor() as cur:
+        cur.execute(sql, (agent, event, payload))
+    conn.commit()
+
+
+def decision_status(conn, decision_id: str) -> Optional[str]:
+    """Return a decision card's status (pending|approved|rejected|expired) or None.
+
+    Used by the ``write_gate`` steering hook (spec §4.3-4): a write is refused
+    unless the referenced decision_id is exactly ``approved``.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT status FROM decisions WHERE id = %s", (decision_id,))
+        row = cur.fetchone()
+        return row[0] if row else None

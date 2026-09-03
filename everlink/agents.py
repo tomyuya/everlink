@@ -23,7 +23,7 @@ from urllib.parse import quote, urlparse
 from pydantic import BaseModel, Field
 from strands import Agent, tool
 
-from . import adapters, detect
+from . import adapters, detect, steering
 from .l2 import probe_l2
 from .llm import StubModel
 from .model import CheckResult, LinkSlot, Proposal
@@ -146,29 +146,46 @@ JUDGE_SYSTEM_PROMPT = (
 )
 
 
-def build_scanner(model, hooks: Optional[list] = None, callback_handler=None) -> Agent:
+def build_scanner(model, hooks: Optional[list] = None, callback_handler=None,
+                  audit_sink=None, enforce: bool = False) -> Agent:
     """Scanner agent (spec §6): discovery + L1/L2 detection tools, read-only.
 
     ``callback_handler=None`` keeps the agent SILENT: Strands' default prints
     every tool call ("Tool #1: ...") to stdout, but EverLink agents are backend
     components — the CLI/report owns user-facing output.
+
+    ``enforce=True`` assembles the spec §6 scanner hooks (``[audit]``) unless an
+    explicit ``hooks`` list is given. ``audit_sink`` chooses where audit records
+    go (default: an in-memory collector; production passes ``steering.db_audit_sink``).
     """
+    if hooks is None:
+        hooks = steering.scanner_hooks(audit_sink) if enforce else []
     return Agent(model=model, system_prompt=SCANNER_SYSTEM_PROMPT,
-                 tools=[extract_slots, http_probe, page_parse], hooks=list(hooks or []),
+                 tools=[extract_slots, http_probe, page_parse], hooks=list(hooks),
                  callback_handler=callback_handler)
 
 
-def build_judge(model, hooks: Optional[list] = None, callback_handler=None) -> Agent:
+def build_judge(model, hooks: Optional[list] = None, callback_handler=None,
+                audit_sink=None, enforce: bool = False) -> Agent:
     """Judge agent (spec §6): forced ``structured_output_model=Proposal``.
 
     Silent by default (see build_scanner); pass a callback_handler to stream.
+
+    ``enforce=True`` assembles the spec §6 judge hooks (``[scope_policy,
+    editorial_policy, audit]``) unless an explicit ``hooks`` list is given.
+    Enforcement is OPT-IN: the Evals harness builds a raw judge (no hooks) so the
+    policy oracle scores the Judge's actual proposals — enforcement (hooks) and
+    scoring (oracle) are deliberately separate consumers of the same policy module.
     """
+    if hooks is None:
+        hooks = steering.judge_hooks(audit_sink) if enforce else []
     return Agent(model=model, system_prompt=JUDGE_SYSTEM_PROMPT,
                  tools=[find_alternatives], structured_output_model=Proposal,
-                 hooks=list(hooks or []), callback_handler=callback_handler)
+                 hooks=list(hooks), callback_handler=callback_handler)
 
 
-def build_stub_judge(hooks: Optional[list] = None, callback_handler=None) -> Agent:
+def build_stub_judge(hooks: Optional[list] = None, callback_handler=None,
+                     audit_sink=None, enforce: bool = False) -> Agent:
     """Judge on an offline ``StubModel`` — for CI / ``--judge stub`` demos.
 
     HONEST by construction: a stub cannot really judge a fix, so it always
@@ -184,7 +201,8 @@ def build_stub_judge(hooks: Optional[list] = None, callback_handler=None) -> Age
                       "Use --judge bedrock for real proposals."),
         "risk_level": "high",
     })
-    return build_judge(model, hooks=hooks, callback_handler=callback_handler)
+    return build_judge(model, hooks=hooks, callback_handler=callback_handler,
+                       audit_sink=audit_sink, enforce=enforce)
 
 
 def _judge_prompt(slot: LinkSlot, check: CheckResult) -> str:
@@ -204,8 +222,17 @@ def _judge_prompt(slot: LinkSlot, check: CheckResult) -> str:
 
 
 def judge_slot(judge: Agent, slot: LinkSlot, check: CheckResult) -> Proposal:
-    """Run the Judge on one problem slot; never fabricate if output is missing."""
-    result = judge(_judge_prompt(slot, check))
+    """Run the Judge on one problem slot; never fabricate if output is missing.
+
+    The slot (and the price the article claimed, for the editorial hook) is threaded
+    via ``invocation_state`` so the spec §6 steering hooks can enforce against the
+    real context. This is harmless when the judge has no hooks (Evals scoring path).
+    """
+    claimed_price = detect.claimed_price_from_text(slot.surrounding_sentence or "")
+    result = judge(
+        _judge_prompt(slot, check),
+        invocation_state={"slot": slot.model_dump(), "claimed_price": claimed_price},
+    )
     so = getattr(result, "structured_output", None)
     if isinstance(so, Proposal):
         return so

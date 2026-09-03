@@ -15,9 +15,10 @@ operational store (never a source-site host — see db._assert_writable).
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
-from . import agents
+from . import agents, steering
 from .llm import BedrockNotConfigured, get_model
 
 
@@ -45,8 +46,12 @@ def _print_report(report: agents.ScanReport) -> None:
             print(f"                 {prop.rationale}")
 
 
-def _persist_checks(report: agents.ScanReport) -> int:
-    """Write slot_checks to EverLink's own DB (guarded). Returns rows written."""
+def _persist(report: agents.ScanReport, audit_records: list[dict]) -> int:
+    """Write slot_checks + audit_log rows to EverLink's own DB (guarded).
+
+    Returns slot_check rows written. Audit rows are appended best-effort so a
+    steering/tool trail survives the run (spec §5 audit_log).
+    """
     from . import db
 
     dsn = db.everlink_dsn()          # raises RuntimeError if unset
@@ -55,16 +60,21 @@ def _persist_checks(report: agents.ScanReport) -> int:
         db.ensure_schema(conn)
         for c in report.checks:
             db.insert_slot_check(c)
+        for r in audit_records:
+            db.insert_audit(conn, r.get("agent", ""), r.get("event", "tool_result"),
+                            json.dumps(r, default=str))
     finally:
         conn.close()
     return len(report.checks)
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
+    audit = steering.AuditCollector()
+    enforce = not args.no_enforce
     judge = None
     backend = "none"
     if args.judge == "stub":
-        judge = agents.build_stub_judge()
+        judge = agents.build_stub_judge(audit_sink=audit, enforce=enforce)
         backend = "stub"
     elif args.judge == "bedrock":
         try:
@@ -72,7 +82,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         except BedrockNotConfigured as e:
             print(f"[everlink] Bedrock unavailable:\n{e}", file=sys.stderr)
             return 2
-        judge = agents.build_judge(model)
+        judge = agents.build_judge(model, audit_sink=audit, enforce=enforce)
         backend = "bedrock"
 
     adapter_kwargs: dict = {}
@@ -89,15 +99,22 @@ def cmd_scan(args: argparse.Namespace) -> int:
         judge=judge, judge_backend=backend, **adapter_kwargs)
     _print_report(report)
 
+    if backend != "none":
+        cancels = audit.events().count("steering_cancel")
+        print(f"\n  steering: enforce={'on' if enforce else 'off'}; "
+              f"{cancels} proposal(s) blocked/re-steered by hooks; "
+              f"{len(audit.records)} tool call(s) audited.")
+
     if args.dry_run:
         print("\n[2/2] --dry-run: nothing written to any database (read-only scan).")
         return 0
     try:
-        n = _persist_checks(report)
+        n = _persist(report, audit.records)
     except RuntimeError as e:
         print(f"\n[2/2] skipped persistence: {e}", file=sys.stderr)
         return 0
-    print(f"\n[2/2] persisted {n} slot_checks to EverLink's operational DB.")
+    print(f"\n[2/2] persisted {n} slot_checks (+{len(audit.records)} audit rows) "
+          f"to EverLink's operational DB.")
     return 0
 
 
@@ -115,6 +132,9 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--no-l2", action="store_true", help="L1 only (skip L2 page-parse)")
     sc.add_argument("--judge", choices=["none", "stub", "bedrock"], default="none",
                     help="none=detection only (default); stub=offline; bedrock=real LLM")
+    sc.add_argument("--no-enforce", action="store_true",
+                    help="disable spec §6 steering hooks on the Judge (they are ON by "
+                         "default; enforcement blocks/re-steers unsafe proposals)")
     sc.add_argument("--dry-run", action="store_true", help="write nothing to any database")
     sc.add_argument("--max-pages", type=int, default=None, help="generic adapter: max pages to crawl")
     sc.add_argument("--include-internal", action="store_true",
