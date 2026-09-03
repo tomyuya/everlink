@@ -18,7 +18,7 @@ import argparse
 import json
 import sys
 
-from . import agents, cards, hitl, steering
+from . import agents, cards, hitl, notify, steering
 from .llm import BedrockNotConfigured, get_model
 from .queue import DbDecisionStore
 
@@ -245,6 +245,121 @@ def cmd_worker(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _print_note(note: "notify.Note") -> None:
+    """Print a composed message to stdout (used by ``notify --dry-run``)."""
+    bar = "=" * 72
+    print(f"\n{bar}\nSUBJECT: {note.subject}\n{'-' * 72}\n{note.text}")
+    if note.html:
+        print(f"{'-' * 72}\n[html part: {len(note.html)} chars]")
+    print(bar)
+
+
+def _print_delivery(results: list) -> None:
+    """Print honest per-channel delivery outcomes (ASCII only — Windows-safe)."""
+    for r in results:
+        print(f"  [{r.status:7s}] {r.channel:9s} {r.detail}")
+
+
+def _audit_notify(conn, kind: str, results: list, extra: dict | None = None) -> None:
+    """Append one ``notify`` row to audit_log (best-effort; never crashes a push)."""
+    from . import db
+
+    payload = {
+        "agent": "notifier", "event": "notify", "kind": kind,
+        "channels": [r.channel for r in results],
+        "sent": sum(1 for r in results if r.status == "sent"),
+        "skipped": sum(1 for r in results if r.status == "skipped"),
+        "failed": sum(1 for r in results if r.status == "failed"),
+    }
+    if extra:
+        payload.update(extra)
+    try:
+        db.insert_audit(conn, "notifier", "notify", json.dumps(payload, default=str))
+    except Exception as e:  # noqa: BLE001 - audit is best-effort, never fails a push
+        print(f"  (audit skipped: {e})", file=sys.stderr)
+
+
+def _brief_from_queue(store, limit: int) -> "notify.MorningBrief":
+    """Build the morning brief from the live queue's counts + pending cards."""
+    counts = store.counts()
+    pending = store.list_by_status("pending", limit=limit)
+    by_risk: dict[str, int] = {}
+    by_action: dict[str, int] = {}
+    high_risk_ids: list[str] = []
+    for c in pending:
+        by_risk[c.proposal.risk_level] = by_risk.get(c.proposal.risk_level, 0) + 1
+        by_action[c.proposal.action] = by_action.get(c.proposal.action, 0) + 1
+        if c.proposal.risk_level == "high":
+            high_risk_ids.append(c.id)
+    return notify.MorningBrief(
+        decisions_pending=counts.get("pending", 0),
+        problem_slots=sum(len(c.affected_slot_ids) for c in pending),
+        by_risk=by_risk, by_action=by_action, high_risk_ids=high_risk_ids)
+
+
+def cmd_notify(args: argparse.Namespace) -> int:
+    """Push the queue to the operator over Resend/Telegram (spec §7 push-to-surface).
+
+    Reads the SAME durable ``decisions`` queue the board and worker use, then either
+    (default) risk-routes pending cards — medium/high as immediate single-card pushes,
+    low rolled into one batch-approval list — or (``--brief``) sends the morning digest.
+
+    ``--dry-run`` composes + prints and sends NOTHING over the network. Delivery is
+    reported honestly: ``sent`` only on a real 2xx, ``skipped`` when a channel has no
+    credentials, ``failed`` on a 4xx/5xx or transport error. Every real push is audited.
+    """
+    try:
+        conn, store = _open_db_store()
+    except RuntimeError as e:
+        print(f"[everlink] notify unavailable: {e}", file=sys.stderr)
+        return 2
+    try:
+        cfg = notify.NotifyConfig.from_env()
+        if args.channel == "email":                 # channel filter => clear the other
+            cfg.telegram_token, cfg.telegram_chat_ids = "", []
+        elif args.channel == "telegram":
+            cfg.resend_api_key, cfg.resend_from, cfg.notify_emails = "", "", []
+        notifier = notify.Notifier(config=cfg)
+
+        if args.brief:
+            brief = _brief_from_queue(store, args.limit)
+            if args.dry_run:
+                _print_note(notify.compose_morning_brief(brief, cfg.board_url))
+                print("\n  --dry-run: composed the morning brief; nothing sent.")
+                return 0
+            results = notifier.push_morning_brief(brief)
+            print(f"morning brief -> channel(s) {notifier.active_channels() or '(none)'}:")
+            _print_delivery(results)
+            _audit_notify(conn, "morning_brief", results,
+                          {"pending": brief.decisions_pending,
+                           "problem_slots": brief.problem_slots})
+            return 1 if any(r.status == "failed" for r in results) else 0
+
+        pending = store.list_by_status("pending", limit=args.limit)
+        if not pending:
+            print("  no pending decision cards to push.")
+            return 0
+        if args.dry_run:
+            route = notify.route_cards(pending)
+            for c in route.immediate:
+                _print_note(notify.compose_decision_card(c, cfg.board_url))
+            if route.batch:
+                _print_note(notify.compose_batch_list(route.batch, cfg.board_url))
+            print(f"\n  --dry-run: composed {len(route.immediate)} immediate + "
+                  f"{1 if route.batch else 0} batch message(s); nothing sent.")
+            return 0
+        results, route = notifier.push_decision_cards(pending)
+        print(f"decision cards -> channel(s) {notifier.active_channels() or '(none)'}: "
+              f"{len(route.immediate)} immediate (medium/high) + "
+              f"{len(route.batch)} batched (low).")
+        _print_delivery(results)
+        _audit_notify(conn, "decision_cards", results,
+                      {"immediate": len(route.immediate), "batch": len(route.batch)})
+        return 1 if any(r.status == "failed" for r in results) else 0
+    finally:
+        conn.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="everlink", description="EverLink - autonomous link-rot steward for content sites.")
@@ -289,9 +404,26 @@ def build_parser() -> argparse.ArgumentParser:
     wk.add_argument("--interval", type=float, default=5.0, help="seconds between polls")
     wk.add_argument("--max-iterations", type=int, default=None, help="stop after N polls")
     wk.set_defaults(func=cmd_worker)
+
+    nt = sub.add_parser("notify", help="push the queue to the operator (Resend email / Telegram)")
+    nt.add_argument("--brief", action="store_true",
+                    help="send the morning digest instead of the pending decision cards")
+    nt.add_argument("--channel", choices=["all", "email", "telegram"], default="all",
+                    help="restrict to one channel (default: every configured channel)")
+    nt.add_argument("--limit", type=int, default=100, help="max pending cards to push (default 100)")
+    nt.add_argument("--dry-run", action="store_true",
+                    help="compose + print; send NOTHING over the network (no email/telegram dispatched)")
+    nt.set_defaults(func=cmd_notify)
     return ap
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Composed messages use em-dash / ellipsis / risk emoji; force UTF-8 so a Windows
+    # console (cp1252/cp932) can print them in `notify --dry-run` without UnicodeEncodeError.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - best-effort (redirected/older streams)
+            pass
     args = build_parser().parse_args(argv)
     return args.func(args)

@@ -177,8 +177,9 @@ def insert_audit(conn, agent: str, event: str, payload: str | None = None) -> No
     """Append one row to audit_log (spec §5).
 
     ``event`` is one of: tool_call | tool_result | steering_guide | steering_cancel
-    | interrupt | write | rollback. Used by the Phase-D ``audit`` hook (pd1) and
-    every later write/rollback path — the audit trail is append-only.
+    | interrupt | write | rollback | notify. Used by the Phase-D ``audit`` hook (pd1),
+    the push layer (pd4 ``notify``), and every later write/rollback path — the audit
+    trail is append-only.
     """
     _assert_writable(conn.info.dsn or "")
     sql = "INSERT INTO audit_log (agent, event, payload) VALUES (%s, %s, %s)"

@@ -136,6 +136,14 @@ python scripts/verify_strands.py
 
 # 5. (Phase A) export the read-only LinkSlot snapshot from the three sites
 python scripts/export_slots.py
+
+# 6. (pd4) push the decision queue to the operator — Resend email / Telegram.
+#    --dry-run composes + prints and sends NOTHING. A real push activates a channel
+#    only when its credentials are set (email: RESEND_API_KEY + RESEND_FROM +
+#    EVERLINK_NOTIFY_EMAIL; telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID); with
+#    none set, delivery is honestly reported as "skipped" — never faked.
+python -m everlink notify --brief --dry-run    # compose the morning digest
+python -m everlink notify --dry-run            # risk-route pending cards (low->batch, med/high->immediate)
 ```
 
 ### AWS / Bedrock auth

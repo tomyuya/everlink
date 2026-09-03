@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   ts TIMESTAMPTZ NOT NULL DEFAULT now(),
   agent TEXT NOT NULL,
-  event TEXT NOT NULL,                   -- tool_call | tool_result | steering_guide | steering_cancel | interrupt | write | rollback
+  event TEXT NOT NULL,                   -- tool_call | tool_result | steering_guide | steering_cancel | interrupt | write | rollback | notify
   payload TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts DESC);
