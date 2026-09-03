@@ -97,6 +97,15 @@ class DecisionStore(abc.ABC):
         """pending -> rejected (records the reason). False if not found / not pending."""
 
     @abc.abstractmethod
+    def reject_approved(self, decision_id: str, reason: str = "") -> bool:
+        """approved -> rejected (terminal DEAD-LETTER). The pe1 writer handler calls
+        this when a decisive failure (write refused by the guard, or rolled back after
+        verify_fix failed) means the card must NOT be retried: it flips the claimed
+        card to ``rejected`` with an honest machine reason, so the worker's subsequent
+        ``mark_applied`` is a no-op instead of an infinite retry loop. False if not
+        found / not approved."""
+
+    @abc.abstractmethod
     def claim_next_approved(self) -> Optional[Decision]:
         """Oldest approved card (FIFO) WITHOUT changing its status, or None."""
 
@@ -161,6 +170,15 @@ class InMemoryDecisionStore(DecisionStore):
             return False
         c.status = REJECTED
         c.reject_reason = reason or None
+        return True
+
+    def reject_approved(self, decision_id: str, reason: str = "") -> bool:
+        c = self._cards.get(decision_id)
+        if c is None or c.status != APPROVED:
+            return False
+        c.status = REJECTED
+        c.reject_reason = reason or None
+        self._decided_seq.pop(decision_id, None)   # drop the claim-ordering entry
         return True
 
     def claim_next_approved(self) -> Optional[Decision]:
@@ -262,6 +280,18 @@ class DbDecisionStore(DecisionStore):
                "WHERE id = %s AND status = %s")
         with self._cur() as cur:
             cur.execute(sql, (REJECTED, _now(), reason or None, decision_id, PENDING))
+            n = cur.rowcount
+        self._conn.commit()
+        return n > 0
+
+    def reject_approved(self, decision_id: str, reason: str = "") -> bool:
+        # approved -> rejected dead-letter. COALESCE keeps the human's approval time as
+        # decided_at while recording the machine reason; scope to status=approved so a
+        # concurrent worker transition (applied) can never be clobbered.
+        sql = ("UPDATE decisions SET status = %s, decided_at = COALESCE(decided_at, %s), "
+               "reject_reason = %s WHERE id = %s AND status = %s")
+        with self._cur() as cur:
+            cur.execute(sql, (REJECTED, _now(), reason or None, decision_id, APPROVED))
             n = cur.rowcount
         self._conn.commit()
         return n > 0

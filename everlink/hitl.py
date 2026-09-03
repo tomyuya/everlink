@@ -141,7 +141,9 @@ class DecisionWorker:
     handler failure leaves the card approved and it is retried on the next poll; the
     worker marks a card ``applied`` only after the handler returns without raising.
     A failing card stops the current drain (to avoid a tight loop) and is retried on
-    the next poll — pe1 adds a dead-letter/backoff for persistently-failing writes.
+    the next poll. A DECISIVE failure (the pe1 writer refused the write, or rolled it
+    back after verify_fix failed) is dead-lettered by the handler via
+    ``store.reject_approved`` so it is not retried forever.
     """
 
     def __init__(self, store: DecisionStore, handler: Handler = null_handler,
@@ -173,9 +175,15 @@ class DecisionWorker:
             except Exception as e:  # noqa: BLE001 - leave approved, retry next poll
                 self._audit("worker_error", dec, error=repr(e))
                 break
-            self.store.mark_applied(dec.id)
-            self._audit("write", dec)
-            applied += 1
+            # pe1 dead-letter: the writer handler may terminally reject a card it could
+            # not honour (write refused / verify failed -> rolled back) via
+            # store.reject_approved. Then mark_applied is a no-op (returns False) and the
+            # card is NOT counted applied — an honest 'dead_letter', not an infinite retry.
+            if self.store.mark_applied(dec.id):
+                self._audit("write", dec)
+                applied += 1
+            else:
+                self._audit("dead_letter", dec)
         return applied
 
     def run(self, *, poll_interval: float = 5.0, max_iterations: Optional[int] = None,

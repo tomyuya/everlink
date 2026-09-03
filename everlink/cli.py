@@ -18,7 +18,7 @@ import argparse
 import json
 import sys
 
-from . import agents, cards, hitl, notify, steering
+from . import agents, cards, hitl, notify, steering, writer
 from .llm import BedrockNotConfigured, get_model
 from .queue import DbDecisionStore
 
@@ -215,10 +215,12 @@ def cmd_decide(args: argparse.Namespace) -> int:
 def cmd_worker(args: argparse.Namespace) -> int:
     """Poll the durable queue and dispatch APPROVED cards (the async-Interrupt track).
 
-    pd2 ships the queue + polling with a NULL handler: a claimed card is marked
-    'applied' without touching any site (the safe default). pe1 plugs the Writer
-    agent (snapshot -> apply_fix -> verify_fix) in as the handler. Every dispatch is
-    audited to audit_log over the same guarded connection.
+    pe1 plugs the REAL Writer handler in (``writer.make_writer_handler``): a claimed card
+    runs snapshot -> apply_fix -> verify_fix against EverLink's OWN store (the aethelgem
+    mirror only — never a source site's production DB), and is rolled back + dead-lettered
+    to ``rejected`` if the replacement URL does not re-probe healthy. Every step is audited
+    to audit_log over the same guarded connection. ``--handler null`` keeps pd2's safe
+    no-op (mark approved cards applied WITHOUT writing) for demos that must not mutate.
     """
     try:
         conn, store = _open_db_store()
@@ -226,11 +228,23 @@ def cmd_worker(args: argparse.Namespace) -> int:
         print(f"[everlink] worker unavailable: {e}", file=sys.stderr)
         return 2
     try:
-        worker = hitl.DecisionWorker(store, handler=hitl.null_handler,
-                                     audit_sink=steering.db_audit_sink(conn))
+        audit_sink = steering.db_audit_sink(conn)
+        if args.handler == "writer":
+            handler = writer.make_writer_handler(
+                conn, store, audit_sink=audit_sink,
+                timeout=args.timeout, use_l2=not args.no_l2)
+            print("  worker: handler=writer (snapshot -> apply -> verify -> rollback on "
+                  "failure); writes EverLink's own aethelgem mirror only.")
+        else:
+            handler = hitl.null_handler
+            print("  worker: handler=null (marks approved cards applied WITHOUT writing "
+                  "anything — the safe no-op).")
+        worker = hitl.DecisionWorker(store, handler=handler, audit_sink=audit_sink)
         if args.once:
             applied = worker.poll_once()
-            print(f"  worker: 1 poll -> {applied} approved decision(s) applied.")
+            print(f"  worker: 1 poll -> {applied} approved decision(s) applied "
+                  f"(a card that could not be honoured is dead-lettered to 'rejected', "
+                  f"not applied).")
             return 0
         print(f"  worker: polling every {args.interval}s "
               f"(max_iterations={args.max_iterations or 'unbounded'}); Ctrl-C to stop.")
@@ -403,6 +417,13 @@ def build_parser() -> argparse.ArgumentParser:
     wk.add_argument("--once", action="store_true", help="drain once and exit (no poll loop)")
     wk.add_argument("--interval", type=float, default=5.0, help="seconds between polls")
     wk.add_argument("--max-iterations", type=int, default=None, help="stop after N polls")
+    wk.add_argument("--handler", choices=["writer", "null"], default="writer",
+                    help="writer = the real snapshot->apply->verify->rollback path "
+                         "(default); null = mark applied WITHOUT writing (safe no-op)")
+    wk.add_argument("--no-l2", action="store_true",
+                    help="verify_fix re-probe at L1 only (skip the selective L2 fetch)")
+    wk.add_argument("--timeout", type=float, default=15.0,
+                    help="per-request timeout for the verify_fix re-probe (seconds)")
     wk.set_defaults(func=cmd_worker)
 
     nt = sub.add_parser("notify", help="push the queue to the operator (Resend email / Telegram)")

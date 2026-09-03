@@ -177,9 +177,10 @@ def insert_audit(conn, agent: str, event: str, payload: str | None = None) -> No
     """Append one row to audit_log (spec §5).
 
     ``event`` is one of: tool_call | tool_result | steering_guide | steering_cancel
-    | interrupt | write | rollback | notify. Used by the Phase-D ``audit`` hook (pd1),
-    the push layer (pd4 ``notify``), and every later write/rollback path — the audit
-    trail is append-only.
+    | interrupt | notify | write | write_refused | verify | rollback | dead_letter
+    | worker_error. Used by the Phase-D ``audit`` hook (pd1), the push layer (pd4
+    ``notify``), and the Writer / worker path (pe1: ``write`` / ``write_refused`` /
+    ``verify`` / ``rollback`` / ``dead_letter``) — the audit trail is append-only.
     """
     _assert_writable(conn.info.dsn or "")
     sql = "INSERT INTO audit_log (agent, event, payload) VALUES (%s, %s, %s)"
@@ -198,3 +199,97 @@ def decision_status(conn, decision_id: str) -> Optional[str]:
         cur.execute("SELECT status FROM decisions WHERE id = %s", (decision_id,))
         row = cur.fetchone()
         return row[0] if row else None
+
+
+# --------------------------------------------------------------------------- #
+# Writer write-path (spec §5 write_snapshots). The MUTATING helpers below run
+# inside the CALLER's transaction (``with conn.transaction():``) and deliberately
+# DO NOT commit — so snapshot + apply + rollback are atomic (spec §5: "write-back
+# is a single transaction"; no half-written state). All are EverLink-own-DB only.
+# --------------------------------------------------------------------------- #
+CONTENT_FIELDS = ("url", "target_url", "anchor_text", "surrounding_sentence", "status")
+
+
+def _row_to_slot(row) -> LinkSlot:
+    cols = SLOT_COLUMNS + ["created_at", "updated_at"]
+    raw = dict(zip(cols, row)) if not isinstance(row, dict) else row
+    return LinkSlot(
+        id=raw["id"], site=raw["site"], article_id=str(raw.get("article_id") or ""),
+        article_title=raw.get("article_title") or "", block_id=str(raw.get("block_id") or ""),
+        block_type=raw.get("block_type") or "", slot_type=raw["slot_type"],
+        role=raw.get("role"), anchor_text=raw.get("anchor_text"), url=raw["url"],
+        target_url=raw.get("target_url"), surrounding_sentence=raw.get("surrounding_sentence"),
+        regions=raw.get("regions"), protected=int(raw.get("protected") or 0),
+        status=raw.get("status") or "active",
+    )
+
+
+def fetch_slot(conn, slot_id: str) -> Optional[LinkSlot]:
+    """Read ONE link_slots row from EverLink's own store (read-only)."""
+    cols = ", ".join(SLOT_COLUMNS)
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT {cols} FROM link_slots WHERE id = %s", (slot_id,))
+        row = cur.fetchone()
+        return _row_to_slot(row) if row else None
+
+
+def fetch_slot_content(conn, slot_id: str) -> Optional[dict]:
+    """The mutable content fields of a slot (the write-snapshot ``before`` state)."""
+    cols = ", ".join(CONTENT_FIELDS)
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT {cols} FROM link_slots WHERE id = %s", (slot_id,))
+        row = cur.fetchone()
+        return dict(zip(CONTENT_FIELDS, row)) if row else None
+
+
+def update_slot_content(conn, slot_id: str, content: dict) -> bool:
+    """UPDATE a slot's mutable content fields. Runs in the caller's transaction."""
+    _assert_writable(conn.info.dsn or "")
+    keys = [k for k in CONTENT_FIELDS if k in content]
+    if not keys:
+        return False
+    assigns = ", ".join(f"{k} = %s" for k in keys)
+    sql = f"UPDATE link_slots SET {assigns}, updated_at = now() WHERE id = %s"
+    params = tuple(content[k] for k in keys) + (slot_id,)
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.rowcount > 0
+
+
+def insert_write_snapshot(conn, slot_id: str, decision_id: str,
+                          before: dict, after: dict) -> int:
+    """Record a before/after write snapshot; returns its id. Caller's transaction."""
+    import json
+
+    _assert_writable(conn.info.dsn or "")
+    sql = ("INSERT INTO write_snapshots (slot_id, decision_id, before_json, after_json) "
+           "VALUES (%s, %s, %s, %s) RETURNING id")
+    with conn.cursor() as cur:
+        cur.execute(sql, (slot_id, decision_id,
+                          json.dumps(before, default=str), json.dumps(after, default=str)))
+        row = cur.fetchone()
+        return int(row[0]) if row else 0
+
+
+def fetch_latest_snapshot(conn, decision_id: str, slot_id: str) -> Optional[dict]:
+    """The most recent write_snapshot for (decision, slot), or None (read-only)."""
+    sql = ("SELECT id, before_json, after_json, applied_at, rolled_back_at "
+           "FROM write_snapshots WHERE decision_id = %s AND slot_id = %s "
+           "ORDER BY id DESC LIMIT 1")
+    with conn.cursor() as cur:
+        cur.execute(sql, (decision_id, slot_id))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "before_json": row[1], "after_json": row[2],
+                "applied_at": row[3], "rolled_back_at": row[4]}
+
+
+def mark_snapshot_rolled_back(conn, snapshot_id: int) -> bool:
+    """Stamp ``rolled_back_at`` on a snapshot. Runs in the caller's transaction."""
+    _assert_writable(conn.info.dsn or "")
+    sql = "UPDATE write_snapshots SET rolled_back_at = now() WHERE id = %s AND rolled_back_at IS NULL"
+    with conn.cursor() as cur:
+        cur.execute(sql, (snapshot_id,))
+        return cur.rowcount > 0
+

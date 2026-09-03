@@ -23,7 +23,7 @@ from urllib.parse import quote, urlparse
 from pydantic import BaseModel, Field
 from strands import Agent, tool
 
-from . import adapters, detect, steering
+from . import adapters, detect, steering, writer
 from .l2 import probe_l2
 from .llm import StubModel
 from .model import CheckResult, LinkSlot, Proposal
@@ -145,6 +145,24 @@ JUDGE_SYSTEM_PROMPT = (
     "high (sentence rewrite, drop, or anything touching disclosure/commercial intent)."
 )
 
+WRITER_SYSTEM_PROMPT = (
+    "You are EverLink's Writer agent — the ONLY component that mutates content, and you "
+    "are deliberately narrow. Tools: snapshot_block (read a slot's current content), "
+    "apply_fix (apply an APPROVED decision's fix in ONE transaction), verify_fix "
+    "(re-probe a replacement URL for real), rollback (undo an apply_fix from its snapshot).\n"
+    "Discipline (spec §4.3 / §5 — also enforced by the write_gate + disclosure hooks):\n"
+    "1. Never write without a human-APPROVED decision_id; apply_fix/rollback are refused "
+    "otherwise. snapshot_block first, then apply_fix.\n"
+    "2. You write ONLY EverLink's own mirror of aethelgem slots — never a source site's "
+    "production database, never a protected (disclosure/affiliate) slot, never a reference "
+    "link's URL.\n"
+    "3. After a REPLACE_URL you MUST verify_fix: if the replacement does not re-probe "
+    "'healthy', roll it back and report the failure honestly. NEVER fabricate a green "
+    "verification you did not actually run.\n"
+    "4. A fix you cannot apply or verify is escalated, not forced — refusing is a correct "
+    "outcome, not a failure."
+)
+
 
 def build_scanner(model, hooks: Optional[list] = None, callback_handler=None,
                   audit_sink=None, enforce: bool = False) -> Agent:
@@ -203,6 +221,86 @@ def build_stub_judge(hooks: Optional[list] = None, callback_handler=None,
     })
     return build_judge(model, hooks=hooks, callback_handler=callback_handler,
                        audit_sink=audit_sink, enforce=enforce)
+
+
+def build_writer(conn, model, *, is_approved: Optional[callable] = None,
+                 hooks: Optional[list] = None, callback_handler=None, audit_sink=None,
+                 enforce: bool = True, timeout: float = 15.0, use_l2: bool = True) -> Agent:
+    """Writer agent (spec §6): the ONLY mutating agent.
+
+        writer = Agent(..., hooks=[write_gate, disclosure_policy, audit],
+                       tools=[snapshot_block, apply_fix, verify_fix, rollback])
+
+    The four tools are closures bound to ``conn`` (EverLink's own store) + the approval
+    lookup, so an LLM drives the SAME ``everlink.writer`` engine the async worker calls
+    deterministically (``writer.make_writer_handler``). ``enforce=True`` (default)
+    assembles the spec §6 writer hooks; ``write_gate`` refuses apply_fix/rollback without
+    an ``approved`` decision_id, and ``disclosure_policy`` re-checks the protected-slot
+    rule at write time.
+
+    HONESTY: this is the spec §6 LLM-driven surface. The production write path is the
+    deterministic handler (no model needed); a StubModel cannot drive a multi-tool
+    sequence, so the Agent loop is verified by construction + the writer-engine unit
+    tests, not by a scripted end-to-end model run. Real Bedrock-driven writing is a
+    live-demo path, not something the offline suite fakes.
+    """
+    from .queue import DbDecisionStore
+
+    approve = is_approved or steering.db_decision_approval(conn)
+    store = DbDecisionStore(conn)
+
+    @tool
+    def snapshot_block(decision_id: str, slot_id: str) -> dict:
+        """Read one slot's current content — the write-snapshot 'before' state (READ-ONLY).
+        Call this before apply_fix to see exactly what will change."""
+        before = writer.snapshot_block(conn, slot_id)
+        return {"decision_id": decision_id, "slot_id": slot_id,
+                "exists": before is not None, "before": before}
+
+    @tool
+    def apply_fix(decision_id: str, slot_id: str) -> dict:
+        """Apply an APPROVED decision's fix to ONE slot in a single transaction (snapshot +
+        write + before/after record). Refused unless decision_id is 'approved' and the slot
+        passes the disclosure/scope guards; only aethelgem slots are writable."""
+        dec = store.get(decision_id)
+        if dec is None:
+            return {"status": "refused", "slot_id": slot_id,
+                    "reason": f"decision '{decision_id}' not found."}
+        w = writer.apply_fix(conn, dec, slot_id, is_approved=approve)
+        return {"status": w.status, "slot_id": w.slot_id, "site": w.site,
+                "action": w.action, "snapshot_id": w.snapshot_id,
+                "after": w.after, "reason": w.reason}
+
+    @tool
+    def verify_fix(decision_id: str, slot_id: str) -> dict:
+        """Re-probe a REPLACE_URL's new_url for real (L1+L2) and record it to slot_checks.
+        verified=True only on a 'healthy' re-probe; editorial fixes have no new URL to
+        probe and pass trivially (probed=False)."""
+        dec = store.get(decision_id)
+        if dec is None:
+            return {"status": "refused", "slot_id": slot_id,
+                    "reason": f"decision '{decision_id}' not found."}
+        v = writer.verify_fix(conn, dec, slot_id, timeout=timeout, use_l2=use_l2)
+        return {"slot_id": v.slot_id, "verified": v.verified, "probed": v.probed,
+                "verdict": v.verdict, "reason": v.reason}
+
+    @tool
+    def rollback(decision_id: str, slot_id: str) -> dict:
+        """Restore a slot from its latest write_snapshot (undo an apply_fix). Use when
+        verify_fix fails. Single transaction; stamps rolled_back_at."""
+        dec = store.get(decision_id)
+        if dec is None:
+            return {"status": "refused", "slot_id": slot_id,
+                    "reason": f"decision '{decision_id}' not found."}
+        r = writer.rollback(conn, dec, slot_id)
+        return {"status": r.status, "slot_id": r.slot_id,
+                "snapshot_id": r.snapshot_id, "reason": r.reason}
+
+    if hooks is None:
+        hooks = steering.writer_hooks(approve, audit_sink) if enforce else []
+    return Agent(model=model, system_prompt=WRITER_SYSTEM_PROMPT,
+                 tools=[snapshot_block, apply_fix, verify_fix, rollback],
+                 hooks=list(hooks), callback_handler=callback_handler)
 
 
 def _judge_prompt(slot: LinkSlot, check: CheckResult) -> str:
