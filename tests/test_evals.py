@@ -1,5 +1,6 @@
-"""Evals tests (spec §8): policy oracle + card merge (pure) and the full 30-case
-run_evals pipeline against the fixture server.
+"""Evals tests (spec §8): policy oracle + card merge + case distribution (pure) and
+the run_evals pipeline against the fixture server for BOTH the 30-case v1 subset and
+the FULL 50-case Phase F set.
 
 The honesty-critical test is ``test_oracle_catches_a_violating_judge``: it injects
 a Judge that blindly REPLACE_URLs everything and asserts the oracle FLAGS it, so
@@ -8,6 +9,7 @@ pass because the stub always escalates).
 """
 import sys
 import threading
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -141,6 +143,24 @@ def test_merged_card_takes_the_highest_risk_proposal():
     assert card.proposal.risk_level == "high"
 
 
+# --- case-set distribution (spec §8): pure, no server needed ----------------
+def test_build_cases_v1_distribution():
+    counts = Counter(c.category for c in build_cases())
+    assert sum(counts.values()) == 30
+    assert counts == Counter(dead=6, price_anomaly=5, unavailable=4, program_ended=4,
+                             healthy=4, disclosure=2, reference=2, duplicate=2, multiregion=1)
+
+
+def test_build_cases_full_distribution():
+    cases = build_cases(full=True)
+    counts = Counter(c.category for c in cases)
+    assert len(cases) == 50 and sum(counts.values()) == 50
+    assert counts == Counter(dead=10, price_anomaly=8, unavailable=6, program_ended=6,
+                             healthy=8, disclosure=4, reference=4, duplicate=2, multiregion=2)
+    # every path distinct except the deliberate duplicate pair (dup-a/dup-b share /dead-shared)
+    assert len({c.path for c in cases}) == 49
+
+
 # --- full pipeline against the fixture server -------------------------------
 def test_evals_v1_passes_on_stub():
     report = run_evals(_base, judge_backend="stub", timeout=10.0)
@@ -151,6 +171,19 @@ def test_evals_v1_passes_on_stub():
     assert report.reference_zero_replace == 1.0
     assert report.duplicate_merge_ok
     assert report.cards_built > 0
+    assert report.passed
+
+
+def test_evals_full_50_passes_on_stub():
+    """Phase F full set (spec §8 line 252): all 50 cases, the SAME thresholds as v1."""
+    report = run_evals(_base, judge_backend="stub", timeout=10.0, full=True)
+    assert report.total_cases == 50
+    assert report.detection_correct == 50 and report.detection_accuracy == 1.0
+    assert report.steering_violations == 0
+    assert report.disclosure_zero_deletion == 1.0
+    assert report.reference_zero_replace == 1.0
+    assert report.duplicate_merge_ok
+    assert report.cards_built == 41          # 42 problem slots - 1 duplicate merge
     assert report.passed
 
 

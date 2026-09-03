@@ -17,8 +17,10 @@ stub and are reported with the backend named, so a stub run is never mistaken fo
 a Bedrock run. Real Judge quality is scored on Bedrock in Phase F (spec §9) via
 ``judge_backend="bedrock"``; the SAME harness and thresholds apply.
 
-Evals v1 (Phase C) is this 30-case subset; Phase F expands to the full 50 by
-widening the per-category counts in ``build_cases`` (spec §8 distribution).
+``build_cases(full=False)`` is the 30-case v1 subset (Phase C); ``build_cases(full=True)``
+is the FULL 50-case Phase F set (spec §8 distribution). Both run through the SAME harness
+and thresholds — the only difference is the per-category counts, so a v1 pass and a full
+pass are directly comparable.
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from . import agents, detect, policy
+from . import agents, detect, policy, tracing
 from .cards import build_decision_cards
 from .l2 import probe_l2  # noqa: F401  (re-exported for callers that want raw L2)
 from .model import LinkSlot
@@ -52,38 +54,56 @@ class EvalCase:
     article_id: str = "art-1"
 
 
-def build_cases() -> list[EvalCase]:
-    """The 30-case Evals v1 subset (spec §8 distribution, scaled from the 50-set).
+# spec §8 case distribution. v1 (Phase C) is the 30-case baseline subset used to check the
+# Judge early; the FULL Phase F set widens every category to the spec's 50-case distribution.
+# The 'duplicate' category is always exactly ONE merge pair (2 cases) in both sets, so it is
+# not a count knob. dead+price+unavail+progend+healthy+disclosure+reference+dup+multiregion.
+_V1_COUNTS = dict(dead=6, price=5, unavail=4, progend=4, healthy=4,
+                  disclosure=2, reference=2, multiregion=1)          # + dup pair = 30
+_FULL_COUNTS = dict(dead=10, price=8, unavail=6, progend=6, healthy=8,
+                    disclosure=4, reference=4, multiregion=2)         # + dup pair = 50
 
-    dead x6, price_anomaly x5, unavailable x4, program_ended x4, healthy x4,
-    disclosure x2, reference x2, duplicate x2 (one merge pair), multiregion x1.
-    Every case uses a DISTINCT path (so a distinct decision-card merge key) except
-    the duplicate pair, which deliberately shares /dead-shared to exercise merging.
+
+def build_cases(full: bool = False) -> list[EvalCase]:
+    """The Evals case set (spec §8 distribution).
+
+    ``full=False`` -> the 30-case v1 baseline (Phase C): dead x6, price_anomaly x5,
+    unavailable x4, program_ended x4, healthy x4, disclosure x2, reference x2, duplicate x2
+    (one merge pair), multiregion x1.
+    ``full=True`` -> the FULL 50-case Phase F set: dead x10, price_anomaly x8, unavailable
+    x6, program_ended x6, healthy x8, disclosure x4, reference x4, duplicate x2, multiregion
+    x2 (spec §8 line 249).
+
+    Every case uses a DISTINCT path (so a distinct decision-card merge key) except the
+    duplicate pair, which deliberately shares /dead-shared to exercise merging. The fixture
+    server serves all of them via its scenario prefix routes (/dead*, /price-anomaly*,
+    /unavailable*, /affiliate/deal*) plus the /ok* default, so no fixture change is needed.
     """
+    n = _FULL_COUNTS if full else _V1_COUNTS
     cases: list[EvalCase] = []
     price_sentence = "Our top pick, the Sony WH-1000XM5, is just $328.00 today."
 
-    for i in range(1, 7):                                    # dead x6
+    for i in range(1, n["dead"] + 1):                                    # dead
         cases.append(EvalCase(f"dead-{i}", "dead", f"/dead-{i}", expected_verdict="dead"))
-    for i in range(1, 6):                                    # price_anomaly x5
+    for i in range(1, n["price"] + 1):                                   # price_anomaly
         cases.append(EvalCase(f"price-{i}", "price_anomaly", f"/price-anomaly-{i}",
                               expected_verdict="offer_changed", anchor_text="Sony WH-1000XM5",
                               surrounding_sentence=price_sentence))
-    for i in range(1, 5):                                    # unavailable x4
+    for i in range(1, n["unavail"] + 1):                                 # unavailable (soft-404)
         cases.append(EvalCase(f"unavail-{i}", "unavailable", f"/unavailable-{i}",
                               expected_verdict="offer_changed"))
-    for i in range(1, 5):                                    # program_ended x4
+    for i in range(1, n["progend"] + 1):                                 # program_ended
         cases.append(EvalCase(f"progend-{i}", "program_ended", f"/affiliate/deal-{i}?tag=everlink-20",
                               expected_verdict="program_ended", anchor_text="deal"))
-    for i in range(1, 5):                                    # healthy x4
+    for i in range(1, n["healthy"] + 1):                                 # healthy
         cases.append(EvalCase(f"healthy-{i}", "healthy", f"/ok-{i}", expected_verdict="healthy"))
-    for i in range(1, 3):                                    # disclosure dead x2 (hard metric)
+    for i in range(1, n["disclosure"] + 1):                              # disclosure dead (hard metric)
         cases.append(EvalCase(f"disclosure-{i}", "disclosure", f"/dead-disclosure-{i}",
                               expected_verdict="dead", protected=1, role="affiliate_disclosure",
                               block_type="disclosure", anchor_text="our affiliate partner link",
                               surrounding_sentence=("As an Amazon affiliate we earn from qualifying "
                                                     "purchases — see our disclosure.")))
-    for i in range(1, 3):                                    # reference x2 (hard metric)
+    for i in range(1, n["reference"] + 1):                               # reference (hard metric)
         cases.append(EvalCase(f"reference-{i}", "reference", f"/dead-ref-{i}",
                               expected_verdict="dead", slot_type="reference",
                               anchor_text="background reference",
@@ -93,9 +113,9 @@ def build_cases() -> list[EvalCase]:
                           article_id="art-A", anchor_text="the same dead product"))
     cases.append(EvalCase("dup-b", "duplicate", "/dead-shared", expected_verdict="dead",
                           article_id="art-B", anchor_text="the same dead product"))
-    # multiregion x1
-    cases.append(EvalCase("multiregion-1", "multiregion", "/dead-mr-1", expected_verdict="dead",
-                          regions='["us","ca"]'))
+    for i in range(1, n["multiregion"] + 1):                             # multiregion
+        cases.append(EvalCase(f"multiregion-{i}", "multiregion", f"/dead-mr-{i}",
+                              expected_verdict="dead", regions='["us","ca"]'))
     return cases
 
 
@@ -169,95 +189,109 @@ def _make_judge(backend: str):
 
 
 def run_evals(base_url: str, *, judge_backend: str = "stub", judge=None,
-              rate_delay: float = 0.0, timeout: float = 10.0,
+              rate_delay: float = 0.0, timeout: float = 10.0, full: bool = False,
               cases: Optional[list[EvalCase]] = None) -> EvalReport:
     """Run the full eval pipeline against a fixture server at ``base_url``.
 
     discover(predefined cases) -> detect (L1+L2) -> judge each problem -> merge
-    into decision cards -> score the three evaluators.
+    into decision cards -> score the three evaluators. Each stage is wrapped in an
+    OPTIONAL OpenTelemetry span (everlink.tracing): with tracing off they are
+    zero-cost no-ops, with ``--trace`` they emit a run -> {detect,judge,score} tree.
 
-    ``judge`` overrides the backend-built agent (used by tests to inject a
-    deliberately-violating Judge and prove the oracle actually catches it).
+    ``full=True`` runs the FULL 50-case Phase F set (spec §8); the default is the
+    30-case v1 subset. ``judge`` overrides the backend-built agent (used by tests to
+    inject a deliberately-violating Judge and prove the oracle actually catches it).
     """
-    cases = cases or build_cases()
+    cases = cases or build_cases(full=full)
     if judge is None:
         judge = _make_judge(judge_backend)
     slots = [case_to_slot(c, base_url) for c in cases]
 
-    checks = detect.check_slots(slots, rate_delay=rate_delay, timeout=timeout, use_l2=True)
-    checks_by_id = {c.slot_id: c for c in checks}
+    with tracing.span("everlink.evals.run", cases=len(cases),
+                      judge_backend=judge_backend, full=full):
+        with tracing.span("everlink.evals.detect", slots=len(slots)):
+            checks = detect.check_slots(slots, rate_delay=rate_delay, timeout=timeout,
+                                        use_l2=True)
+        checks_by_id = {c.slot_id: c for c in checks}
 
-    # Judge every problem slot (healthy links are left alone), then merge to cards.
-    slot_proposals: list[agents.SlotProposal] = []
-    proposals_by_id = {}
-    if judge is not None:
-        for slot in slots:
-            check = checks_by_id.get(slot.id)
-            if check is None or check.final_verdict == "healthy":
-                continue
-            prop = agents.judge_slot(judge, slot, check)
-            slot_proposals.append(agents.SlotProposal(slot=slot, check=check, proposal=prop))
-            proposals_by_id[slot.id] = prop
-    cards = build_decision_cards(slot_proposals)
+        # Judge every problem slot (healthy links are left alone), then merge to cards.
+        slot_proposals: list[agents.SlotProposal] = []
+        proposals_by_id = {}
+        with tracing.span("everlink.evals.judge", problem_slots=len(slots)):
+            if judge is not None:
+                for slot in slots:
+                    check = checks_by_id.get(slot.id)
+                    if check is None or check.final_verdict == "healthy":
+                        continue
+                    prop = agents.judge_slot(judge, slot, check)
+                    slot_proposals.append(
+                        agents.SlotProposal(slot=slot, check=check, proposal=prop))
+                    proposals_by_id[slot.id] = prop
+            cards = build_decision_cards(slot_proposals)
 
-    # --- evaluator 1: detection accuracy ------------------------------------
-    case_results: list[CaseResult] = []
-    detection_total = detection_correct = 0
-    for slot, case in zip(slots, cases):
-        check = checks_by_id.get(slot.id)
-        got = check.final_verdict if check else None
-        det_ok = None
-        if case.expected_verdict is not None:
-            detection_total += 1
-            det_ok = (got == case.expected_verdict)
-            detection_correct += int(det_ok)
-        prop = proposals_by_id.get(slot.id)
-        violations = policy.proposal_violations(slot, prop) if prop is not None else []
-        case_results.append(CaseResult(
-            id=case.id, category=case.category, expected=case.expected_verdict, got=got,
-            detection_ok=det_ok, action=prop.action if prop else None, violations=violations))
+        # --- evaluator 1: detection accuracy --------------------------------
+        with tracing.span("everlink.evals.score", cards=len(cards)):
+            case_results: list[CaseResult] = []
+            detection_total = detection_correct = 0
+            for slot, case in zip(slots, cases):
+                check = checks_by_id.get(slot.id)
+                got = check.final_verdict if check else None
+                det_ok = None
+                if case.expected_verdict is not None:
+                    detection_total += 1
+                    det_ok = (got == case.expected_verdict)
+                    detection_correct += int(det_ok)
+                prop = proposals_by_id.get(slot.id)
+                violations = policy.proposal_violations(slot, prop) if prop is not None else []
+                case_results.append(CaseResult(
+                    id=case.id, category=case.category, expected=case.expected_verdict,
+                    got=got, detection_ok=det_ok,
+                    action=prop.action if prop else None, violations=violations))
 
-    # --- evaluator 2: steering violations -----------------------------------
-    violation_details = [v for cr in case_results for v in cr.violations]
+            # --- evaluator 2: steering violations ---------------------------
+            violation_details = [v for cr in case_results for v in cr.violations]
 
-    # --- evaluator 3: hard metrics ------------------------------------------
-    def _fraction(category: str, ok) -> float:
-        rows = [(s, c) for s, c in zip(slots, cases) if c.category == category]
-        if not rows:
-            return 1.0
-        good = sum(1 for s, _c in rows if ok(proposals_by_id.get(s.id)))
-        return good / len(rows)
+            # --- evaluator 3: hard metrics ----------------------------------
+            def _fraction(category: str, ok) -> float:
+                rows = [(s, c) for s, c in zip(slots, cases) if c.category == category]
+                if not rows:
+                    return 1.0
+                good = sum(1 for s, _c in rows if ok(proposals_by_id.get(s.id)))
+                return good / len(rows)
 
-    disclosure_zero_deletion = _fraction(
-        "disclosure", lambda p: p is None or p.action not in policy.MODIFYING_ACTIONS)
-    reference_zero_replace = _fraction(
-        "reference", lambda p: p is None or p.action != "REPLACE_URL")
+            disclosure_zero_deletion = _fraction(
+                "disclosure", lambda p: p is None or p.action not in policy.MODIFYING_ACTIONS)
+            reference_zero_replace = _fraction(
+                "reference", lambda p: p is None or p.action != "REPLACE_URL")
 
-    dup_ids = {s.id for s, c in zip(slots, cases) if c.category == "duplicate"}
-    if dup_ids:
-        dup_cards = [c for c in cards if set(c.affected_slot_ids) & dup_ids]
-        duplicate_merge_ok = (len(dup_cards) == 1
-                              and set(dup_cards[0].affected_slot_ids) == dup_ids)
-    else:
-        duplicate_merge_ok = True
+            dup_ids = {s.id for s, c in zip(slots, cases) if c.category == "duplicate"}
+            if dup_ids:
+                dup_cards = [c for c in cards if set(c.affected_slot_ids) & dup_ids]
+                duplicate_merge_ok = (len(dup_cards) == 1
+                                      and set(dup_cards[0].affected_slot_ids) == dup_ids)
+            else:
+                duplicate_merge_ok = True
 
-    return EvalReport(
-        judge_backend=judge_backend, judge_ran=(judge is not None), total_cases=len(cases),
-        detection_total=detection_total, detection_correct=detection_correct,
-        detection_accuracy=(detection_correct / detection_total) if detection_total else 0.0,
-        steering_violations=len(violation_details), violation_details=violation_details,
-        disclosure_zero_deletion=disclosure_zero_deletion,
-        reference_zero_replace=reference_zero_replace,
-        duplicate_merge_ok=duplicate_merge_ok, cards_built=len(cards),
-        case_results=case_results,
-    )
+        return EvalReport(
+            judge_backend=judge_backend, judge_ran=(judge is not None), total_cases=len(cases),
+            detection_total=detection_total, detection_correct=detection_correct,
+            detection_accuracy=((detection_correct / detection_total)
+                                if detection_total else 0.0),
+            steering_violations=len(violation_details), violation_details=violation_details,
+            disclosure_zero_deletion=disclosure_zero_deletion,
+            reference_zero_replace=reference_zero_replace,
+            duplicate_merge_ok=duplicate_merge_ok, cards_built=len(cards),
+            case_results=case_results,
+        )
 
 
 def format_report(r: EvalReport) -> str:
     """Human-readable eval report (ASCII only; Windows-cmd safe)."""
     det_pass = "PASS" if r.detection_accuracy >= DETECTION_THRESHOLD else "FAIL"
+    suite = ("full 50-case Phase F set" if r.total_cases >= 50
+             else f"{r.total_cases}-case v1 subset")
     lines = [
-        "EverLink Evals v1 (30-case subset, spec section 8)",
+        f"EverLink Evals ({suite}, spec section 8)",
         f"  judge backend        : {r.judge_backend}",
         f"  cases                : {r.total_cases}",
         "",
