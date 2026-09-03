@@ -65,6 +65,84 @@ def test_allows_write_to_own_host():
     _assert_writable(os.environ[OWN])
 
 
+# --------------------------------------------------------------------------- #
+# cli._persist regression — the scan's DB write path MUST pass conn to insert_slot_check
+# --------------------------------------------------------------------------- #
+class _RecInfo:
+    dsn = "postgresql://u@ep-everlink-test.aws.neon.tech/everlink"
+
+
+class _RecCursor:
+    def __init__(self, conn):
+        self._c = conn
+        self.rowcount = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def executemany(self, sql, rows):
+        for r in rows:
+            self.execute(sql, r)
+
+    def execute(self, sql, params=None):
+        self._c.log.append((" ".join(sql.split()), params))
+        self.rowcount = 1
+
+
+class _RecConn:
+    def __init__(self):
+        self.log: list = []
+        self.info = _RecInfo()
+
+    def cursor(self):
+        return _RecCursor(self)
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+def test_persist_passes_conn_to_insert_slot_check():
+    """Regression for the nightly-scan crash: ``cli._persist`` must call
+    ``insert_slot_check(conn, check)``. Calling it with only the CheckResult raised
+    ``TypeError: insert_slot_check() missing 1 required positional argument: 'result'``
+    and failed the scan step for any site that actually had checks to persist (the
+    first-party sites yield 0 slots, so only a generic scan exposed it)."""
+    from everlink import cli, db
+    from everlink.agents import ScanReport
+    from everlink.model import CheckResult, LinkSlot
+
+    _setenv(**{SRC: None, DENY: None,
+               OWN: "postgresql://u@ep-everlink-test.aws.neon.tech/everlink"})
+    conn = _RecConn()
+    real_connect, real_schema = db.connect, db.ensure_schema
+    db.connect = lambda dsn: conn
+    db.ensure_schema = lambda c: None
+    try:
+        report = ScanReport(
+            source="x", scanned=1, judge_backend="stub",
+            slots=[LinkSlot(id="gen-x", site="news.ycombinator.com", article_id="",
+                            article_title="", block_id="", block_type="",
+                            slot_type="reference", url="https://example.com/dead")],
+            checks=[CheckResult(slot_id="gen-x", l1_status=200, final_verdict="dead")])
+        written, enqueued = cli._persist(report, [], None)
+    finally:
+        db.connect, db.ensure_schema = real_connect, real_schema
+        for k in (SRC, DENY, OWN):
+            os.environ.pop(k, None)
+
+    assert written == 1 and enqueued == 0
+    order = [s.split()[2] for s, _ in conn.log if s.startswith("INSERT INTO")]
+    assert "link_slots" in order and "slot_checks" in order, conn.log
+    assert order.index("link_slots") < order.index("slot_checks"), \
+        f"link_slots (FK parent) must be written before slot_checks: {order}"
+
+
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 

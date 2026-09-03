@@ -52,7 +52,7 @@ source site's production host or the forbidden Blue-Neon instance.
 | Neon Postgres project | EverLink's own store | console.neon.tech (or the Neon Vercel Marketplace integration) |
 | Vercel account + project | hosts the board | vercel.com |
 | Railway account + project | hosts the agent container + cron | railway.com |
-| AWS Builder ID + Bedrock access | the Judge/Writer LLM (`us.anthropic.claude-3-5-sonnet…`) | console.aws.amazon.com/bedrock |
+| AWS Builder ID + Bedrock access | the Judge/Writer LLM (`us.anthropic.claude-sonnet-4-6`) | console.aws.amazon.com/bedrock |
 | Resend API key (+ verified sender) | email push | resend.com |
 | Telegram bot token + chat id | optional second push channel | @BotFather |
 
@@ -110,7 +110,7 @@ Set the service's environment variables (Railway dashboard → Variables, or `ra
 ```
 # Bedrock / AWS (the Judge + Writer LLM) — use an IAM role or scoped keys, never hardcoded
 AWS_REGION=us-east-1
-BEDROCK_MODEL_ID=us.anthropic.claude-3-5-sonnet-20241022-v2:0
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6
 AWS_ACCESS_KEY_ID=…            AWS_SECRET_ACCESS_KEY=…      # or attach an IAM role
 
 # EverLink's OWN store (same Neon DSN as the board)

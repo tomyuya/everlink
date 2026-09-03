@@ -34,7 +34,7 @@ T = TypeVar("T", bound=BaseModel)
 
 # spec §6 locks the submission build to Bedrock Claude. Overridable via env so
 # the README can demonstrate Strands' "any model" provider-swap selling point.
-DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-5"
+DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 DEFAULT_REGION = "us-east-1"
 
 

@@ -358,6 +358,7 @@ class SlotProposal(BaseModel):
 class ScanReport(BaseModel):
     source: str
     scanned: int = 0
+    slots: list[LinkSlot] = Field(default_factory=list)
     checks: list[CheckResult] = Field(default_factory=list)
     proposals: list[SlotProposal] = Field(default_factory=list)
     judge_backend: str = "none"          # none | stub | bedrock
@@ -396,5 +397,5 @@ def run_scan(source, *, limit: Optional[int] = 25, rate_delay: float = 1.0,
                 proposals.append(SlotProposal(slot=slot, check=c,
                                               proposal=judge_slot(judge, slot, c)))
 
-    return ScanReport(source=str(source), scanned=len(slots), checks=checks,
+    return ScanReport(source=str(source), scanned=len(slots), slots=slots, checks=checks,
                       proposals=proposals, judge_backend=judge_backend)

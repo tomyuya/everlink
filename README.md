@@ -129,7 +129,7 @@ Within Bedrock the model and region are env-overridable, so you can move between
 variants or cross-region inference profiles with **zero code change**:
 
 ```bash
-BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-5  AWS_REGION=us-east-1  # defaults
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6  AWS_REGION=us-east-1  # defaults
 BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4     AWS_REGION=us-west-2  # cheaper / faster
 ```
 

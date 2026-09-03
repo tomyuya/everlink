@@ -79,8 +79,9 @@ def _persist(report: agents.ScanReport, audit_records: list[dict],
     conn = db.connect(dsn)
     try:
         db.ensure_schema(conn)
+        db.upsert_link_slots(conn, report.slots)   # FK parents first: generic scans discover slots live
         for c in report.checks:
-            db.insert_slot_check(c)
+            db.insert_slot_check(conn, c)
         for r in audit_records:
             db.insert_audit(conn, r.get("agent", ""), r.get("event", "tool_result"),
                             json.dumps(r, default=str))

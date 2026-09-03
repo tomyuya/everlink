@@ -13,3 +13,5 @@ next-env.d.ts.bak
 # misc
 *.tsbuildinfo
 .DS_Store
+.vercel
+.env*
