@@ -19,12 +19,15 @@ strictly read-only:
     path). Any other site is *skipped* (out of scope) — never silently written.
   * ``verify_fix`` re-probes a replacement URL for REAL (L1 + selective L2 via
     ``detect.check_slot``) and records the outcome to ``slot_checks``. A replacement
-    that does not survive verification is rolled back and the card dead-letters to
-    ``rejected`` with an honest reason, so the async worker never loops on it.
+    that does not survive verification is rolled back, the card dead-letters to
+    ``rejected`` with an honest reason (so the async worker never loops on it), AND a
+    NEW *pending* rollback-recommendation card is surfaced to the human with the re-probe
+    evidence (spec §6 "验证失败自动生成回滚建议卡") — the loop closes by handing the
+    decision back, not by silently dropping it.
 
-Pure decision logic (``compute_after`` / ``writing_violations`` / ``interpret_verify``)
-is separated from the DB orchestration so the engine is testable offline against a fake
-cursor, exactly like ``queue.py`` / ``db.py``.
+Pure decision logic (``compute_after`` / ``writing_violations`` / ``interpret_verify`` /
+``rollback_recommendation``) is separated from the DB orchestration so the engine is
+testable offline against a fake cursor, exactly like ``queue.py`` / ``db.py``.
 """
 from __future__ import annotations
 
@@ -307,6 +310,40 @@ def run_fix(conn, decision: Decision, *, is_approved: Callable[[str], bool],
     return outcome
 
 
+def rollback_recommendation(decision: Decision, outcome: FixOutcome) -> Optional[Decision]:
+    """PURE: the human-facing 'rollback recommendation' card spec §6 requires when a
+    ``verify_fix`` failure forced an automatic rollback ("验证失败自动生成回滚建议卡").
+
+    The original approved card dead-letters to ``rejected`` (the worker will not retry
+    it); this NEW *pending* card surfaces the failure back to the human — carrying the
+    real re-probe evidence and an ESCALATE_HUMAN recommendation — so the loop closes
+    honestly: EverLink tried the approved fix, PROVED the replacement did not survive
+    verification, undid the write, and handed the decision back rather than silently
+    dropping it. The card is a *recommendation*, never an applied edit. Its id is
+    deterministic (``<decision>-rollback``) so ``store.enqueue`` is idempotent and a
+    re-run never duplicates it. Returns None when nothing was rolled back.
+    """
+    if not outcome.rolled_back:
+        return None
+    rolled = list(outcome.rolled_back)
+    evidence = [v.reason for v in outcome.verifies
+                if v.slot_id in rolled and not v.verified and v.reason]
+    detail = " | ".join(evidence) or "replacement did not re-probe healthy"
+    rationale = (
+        "An APPROVED fix FAILED verify_fix and was automatically rolled back: the "
+        f"replacement did not survive a real re-probe ({detail}). EverLink undid the "
+        "write, so no content is changed, and is handing this slot back to you — "
+        "recommend a different fix, or leave it as-is. This is a recommendation card, "
+        "not an applied edit."
+    )
+    return Decision(
+        id=f"{decision.id}-rollback",
+        affected_slot_ids=rolled,
+        proposal=Proposal(action="ESCALATE_HUMAN", rationale=rationale, risk_level="high"),
+        status="pending",
+    )
+
+
 def make_writer_handler(conn, store: DecisionStore, *,
                         is_approved: Optional[Callable[[str], bool]] = None,
                         audit_sink: Optional[Callable[[dict], None]] = None,
@@ -344,8 +381,14 @@ def make_writer_handler(conn, store: DecisionStore, *,
         for v in outcome.verifies:
             _rec("verify", decision_id=decision.id, slot_id=v.slot_id, probed=v.probed,
                  verified=v.verified, verdict=v.verdict, reason=v.reason)
+        rec = rollback_recommendation(decision, outcome)
+        if rec is not None:
+            # spec §6 "验证失败自动生成回滚建议卡": surface the auto-rollback back to the
+            # human as a NEW pending card (never applied; the worker only claims approved).
+            store.enqueue([rec])
         for sid in outcome.rolled_back:
-            _rec("rollback", decision_id=decision.id, slot_id=sid)
+            _rec("rollback", decision_id=decision.id, slot_id=sid,
+                 recommendation_card=(rec.id if rec else None))
         if outcome.dead_letter:
             store.reject_approved(decision.id, outcome.dead_letter)
     return handler

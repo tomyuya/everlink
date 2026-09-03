@@ -14,6 +14,10 @@ What is proven here:
     re-probed; only 'healthy' counts as verified; the re-probe is recorded to slot_checks.
   * rollback — restores the before-state and stamps rolled_back_at.
   * run_fix — verify failure rolls the slot back and dead-letters the card.
+  * rollback_recommendation — a failed verify auto-generates a NEW pending ESCALATE_HUMAN
+    'rollback recommendation' card (spec §6 "验证失败自动生成回滚建议卡") carrying the real
+    re-probe evidence; the handler enqueues it and it is NEVER auto-applied (the worker
+    only claims approved cards), so the loop hands the decision back to a human.
   * handler + worker — a dead-lettered card ends 'rejected' (not applied, not retried);
     a clean card is applied by the worker.
 
@@ -405,6 +409,40 @@ def test_run_fix_partial_scope_applies_writable_slot():
 
 
 # --------------------------------------------------------------------------- #
+# rollback_recommendation — spec §6 "验证失败自动生成回滚建议卡" (PURE)
+# --------------------------------------------------------------------------- #
+def test_rollback_recommendation_none_when_nothing_rolled_back():
+    out = writer.FixOutcome(decision_id="dec-1")                      # clean, no rollback
+    assert writer.rollback_recommendation(_dec(), out) is None
+
+
+def test_rollback_recommendation_builds_pending_escalate_card_with_evidence():
+    out = writer.FixOutcome(
+        decision_id="dec-1",
+        verifies=[writer.VerifyResult(
+            slot_id="aeg-1", verified=False, probed=True, verdict="dead",
+            reason="replacement re-probed 'dead' (L1 404, L2 None); NOT verified.")],
+        rolled_back=["aeg-1"],
+        dead_letter="slot 'aeg-1' NOT verified. (rolled back)")
+    rec = writer.rollback_recommendation(_dec(), out)
+    assert rec is not None
+    assert rec.id == "dec-1-rollback"                                 # deterministic => idempotent
+    assert rec.status == "pending"                                    # surfaced to a human, NOT applied
+    assert rec.affected_slot_ids == ["aeg-1"]
+    assert rec.proposal.action == "ESCALATE_HUMAN"
+    assert rec.proposal.risk_level == "high"
+    assert "NOT verified" in rec.proposal.rationale                   # carries the real re-probe evidence
+    assert "rolled back" in rec.proposal.rationale.lower()
+
+
+def test_rollback_recommendation_falls_back_when_no_verify_reason():
+    out = writer.FixOutcome(decision_id="dec-1", rolled_back=["aeg-1"])  # rolled back, no verify detail
+    rec = writer.rollback_recommendation(_dec(), out)
+    assert rec is not None and rec.id == "dec-1-rollback"
+    assert "did not re-probe healthy" in rec.proposal.rationale       # honest generic evidence
+
+
+# --------------------------------------------------------------------------- #
 # handler + worker integration (dead-letter vs applied)
 # --------------------------------------------------------------------------- #
 def test_handler_dead_letters_card_on_failed_verify():
@@ -437,6 +475,26 @@ def test_handler_leaves_card_approved_on_success():
     assert "write" in col.events()
 
 
+def test_handler_enqueues_rollback_recommendation_card():
+    conn = _conn()
+    store = InMemoryDecisionStore()
+    store.enqueue([_dec()])
+    store.approve("dec-1")
+    col = AuditCollector()
+    handler = writer.make_writer_handler(
+        conn, store, is_approved=lambda cid: store.get(cid).status == "approved",
+        audit_sink=col, probe=_probe("dead", 404))
+    handler(store.get("dec-1"))
+    assert store.get("dec-1").status == "rejected"                    # original dead-lettered
+    rec = store.get("dec-1-rollback")                                 # NEW rollback-recommendation
+    assert rec is not None and rec.status == "pending"
+    assert rec.proposal.action == "ESCALATE_HUMAN"
+    assert "NOT verified" in rec.proposal.rationale
+    assert store.claim_next_approved() is None                        # a recommendation is NEVER auto-applied
+    rollbacks = [r for r in col.records if r.get("event") == "rollback"]
+    assert rollbacks and rollbacks[0].get("recommendation_card") == "dec-1-rollback"
+
+
 def test_worker_applies_clean_card_and_dead_letters_bad_one():
     conn = _conn(**{"aeg-2": _slot_row("aeg-2", url="https://dead2.example/p")})
     store = InMemoryDecisionStore()
@@ -460,6 +518,7 @@ def test_worker_applies_clean_card_and_dead_letters_bad_one():
     assert applied == 1                                                # only the clean card
     assert store.get("dec-good").status == "applied"
     assert store.get("dec-bad").status == "rejected"                   # dead-lettered, not retried
+    assert store.get("dec-bad-rollback").status == "pending"           # auto rollback-recommendation surfaced
     assert w.poll_once() == 0                                          # nothing approved remains
     assert "dead_letter" in col.events() and "write" in col.events()
 

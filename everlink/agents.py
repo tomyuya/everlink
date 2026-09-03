@@ -22,6 +22,7 @@ from urllib.parse import quote, urlparse
 
 from pydantic import BaseModel, Field
 from strands import Agent, tool
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 
 from . import adapters, detect, steering, writer
 from .l2 import probe_l2
@@ -229,14 +230,17 @@ def build_writer(conn, model, *, is_approved: Optional[callable] = None,
     """Writer agent (spec §6): the ONLY mutating agent.
 
         writer = Agent(..., hooks=[write_gate, disclosure_policy, audit],
-                       tools=[snapshot_block, apply_fix, verify_fix, rollback])
+                       tools=[snapshot_block, apply_fix, verify_fix, rollback],
+                       conversation_manager=SlidingWindowConversationManager(window_size=20))
 
     The four tools are closures bound to ``conn`` (EverLink's own store) + the approval
     lookup, so an LLM drives the SAME ``everlink.writer`` engine the async worker calls
     deterministically (``writer.make_writer_handler``). ``enforce=True`` (default)
     assembles the spec §6 writer hooks; ``write_gate`` refuses apply_fix/rollback without
     an ``approved`` decision_id, and ``disclosure_policy`` re-checks the protected-slot
-    rule at write time.
+    rule at write time. The writer is the one MULTI-TURN agent (snapshot -> apply ->
+    verify -> rollback is a sequence), so spec §6 gives it a
+    ``SlidingWindowConversationManager(window_size=20)`` to keep the tool-trace bounded.
 
     HONESTY: this is the spec §6 LLM-driven surface. The production write path is the
     deterministic handler (no model needed); a StubModel cannot drive a multi-tool
@@ -300,7 +304,8 @@ def build_writer(conn, model, *, is_approved: Optional[callable] = None,
         hooks = steering.writer_hooks(approve, audit_sink) if enforce else []
     return Agent(model=model, system_prompt=WRITER_SYSTEM_PROMPT,
                  tools=[snapshot_block, apply_fix, verify_fix, rollback],
-                 hooks=list(hooks), callback_handler=callback_handler)
+                 hooks=list(hooks), callback_handler=callback_handler,
+                 conversation_manager=SlidingWindowConversationManager(window_size=20))
 
 
 def _judge_prompt(slot: LinkSlot, check: CheckResult) -> str:
