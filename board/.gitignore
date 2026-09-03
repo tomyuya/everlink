@@ -1,0 +1,15 @@
+# deps
+/node_modules
+
+# next
+/.next
+/out
+next-env.d.ts.bak
+
+# env — NEVER commit real DSNs; only .env.example is tracked
+.env
+.env*.local
+
+# misc
+*.tsbuildinfo
+.DS_Store
