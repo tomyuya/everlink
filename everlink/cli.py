@@ -15,10 +15,12 @@ operational store (never a source-site host — see db._assert_writable).
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 
 from . import agents, cards, hitl, notify, steering, writer
+from . import report as reporting
 from .llm import BedrockNotConfigured, get_model
 from .queue import DbDecisionStore
 
@@ -374,6 +376,53 @@ def cmd_notify(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    """Build + print/push the weekly report (spec §4.1 '... -> 周报'; §4.2 汇报).
+
+    The numbers are the Python MIRROR of the board's /report page —
+    ``report.build_weekly_report`` runs the SAME five aggregates as
+    ``board/lib/queries.ts weeklyStats`` — so the digest and the board never drift.
+    ``--json`` emits the WeeklyStats twin of the /api/report route; ``--dry-run``
+    composes + prints and sends NOTHING; otherwise the report is pushed over the
+    configured channels and audited like any other notification.
+    """
+    try:
+        conn, _ = _open_db_store()
+    except RuntimeError as e:
+        print(f"[everlink] report unavailable: {e}", file=sys.stderr)
+        return 2
+    try:
+        weekly = reporting.build_weekly_report(conn, days=args.days)
+        if args.json:
+            print(json.dumps(dataclasses.asdict(weekly), default=str))
+            return 0
+        cfg = notify.NotifyConfig.from_env()
+        if args.channel == "email":                 # channel filter => clear the other
+            cfg.telegram_token, cfg.telegram_chat_ids = "", []
+        elif args.channel == "telegram":
+            cfg.resend_api_key, cfg.resend_from, cfg.notify_emails = "", "", []
+        note = notify.compose_weekly_report(weekly, cfg.board_url)
+        if args.dry_run:
+            _print_note(note)
+            print(f"\n  --dry-run: composed the weekly report "
+                  f"({weekly.window_days}d window); nothing sent.")
+            return 0
+        notifier = notify.Notifier(config=cfg)
+        results = notifier.push_weekly_report(weekly)
+        print(f"weekly report -> channel(s) {notifier.active_channels() or '(none)'}: "
+              f"{weekly.links_healed} healed, {weekly.decisions_created} created, "
+              f"{weekly.decisions_decided} decided over {weekly.window_days}d.")
+        _print_delivery(results)
+        _audit_notify(conn, "weekly_report", results,
+                      {"window_days": weekly.window_days, "links_healed": weekly.links_healed,
+                       "slots_fixed": weekly.slots_affected_by_applied,
+                       "decisions_created": weekly.decisions_created,
+                       "decisions_decided": weekly.decisions_decided})
+        return 1 if any(r.status == "failed" for r in results) else 0
+    finally:
+        conn.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="everlink", description="EverLink - autonomous link-rot steward for content sites.")
@@ -435,6 +484,16 @@ def build_parser() -> argparse.ArgumentParser:
     nt.add_argument("--dry-run", action="store_true",
                     help="compose + print; send NOTHING over the network (no email/telegram dispatched)")
     nt.set_defaults(func=cmd_notify)
+
+    rp = sub.add_parser("report", help="weekly report — the board /report numbers as a digest")
+    rp.add_argument("--days", type=int, default=7, help="window in days (default 7)")
+    rp.add_argument("--channel", choices=["all", "email", "telegram"], default="all",
+                    help="restrict to one channel (default: every configured channel)")
+    rp.add_argument("--json", action="store_true",
+                    help="emit the WeeklyStats JSON twin of the board's /api/report route")
+    rp.add_argument("--dry-run", action="store_true",
+                    help="compose + print; send NOTHING over the network")
+    rp.set_defaults(func=cmd_report)
     return ap
 
 

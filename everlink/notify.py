@@ -25,7 +25,7 @@ from __future__ import annotations
 import html
 import os
 from dataclasses import dataclass, field
-from datetime import date as _date
+from datetime import date as _date, datetime as _datetime, timezone
 from typing import Callable, Iterable, Optional
 
 import httpx
@@ -90,6 +90,32 @@ class MorningBrief:
     by_risk: dict[str, int] = field(default_factory=dict)
     by_action: dict[str, int] = field(default_factory=dict)
     high_risk_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class WeeklyReport:
+    """The numbers behind the weekly digest — the Python MIRROR of the board's
+    ``weeklyStats`` aggregate (board/lib/queries.ts). The agent's scheduled report
+    (cli ``report``) and the board's /report page therefore show the SAME numbers
+    (single source of truth: one SQL shape, two consumers). Built by
+    ``report.build_weekly_report``; anything left 0/empty is reported honestly, not
+    padded with invented figures."""
+
+    window_days: int = 7
+    generated_at: str = ""                             # ISO; defaults to now
+    by_status: dict[str, int] = field(default_factory=dict)
+    by_action: dict[str, int] = field(default_factory=dict)
+    audit_events: dict[str, int] = field(default_factory=dict)
+    links_healed: int = 0                              # decisions applied in the window
+    slots_affected_by_applied: int = 0                 # slots those applied cards touched
+    decisions_created: int = 0                         # all decisions created in the window
+    decisions_decided: int = 0                         # approved+rejected+applied in window
+
+    @property
+    def is_empty(self) -> bool:
+        """Mirrors the board /report page's 'Nothing to report yet' condition."""
+        return (self.decisions_created == 0 and self.links_healed == 0
+                and not self.audit_events)
 
 
 @dataclass
@@ -278,6 +304,97 @@ def compose_morning_brief(brief: MorningBrief, board_url: str = "") -> Note:
     return Note(subject=subject, text=text, html=body)
 
 
+def _sorted_counts(counts: dict[str, int]) -> list[tuple[str, int]]:
+    """Counts sorted by value desc, key asc — mirrors the board /report Breakdown order."""
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def compose_weekly_report(report: WeeklyReport, board_url: str = "") -> Note:
+    """The weekly digest (spec §4.1 '... -> 周报'; §4.2 '周报 + changelog + 审计日志').
+
+    Renders the SAME numbers as the board's /report page (``WeeklyReport`` mirrors
+    ``weeklyStats``): four headline stats, then the by-status / by-action / audit-event
+    breakdowns. An empty window is reported honestly ("Nothing to report yet"), never
+    padded with invented activity — the digest and the board are one source of truth.
+    """
+    day = report.generated_at or _datetime.now(timezone.utc).isoformat(timespec="seconds")
+    href = board_url.rstrip("/") if board_url else ""
+    link = f"{href}/report" if href else ""
+    subject = (f"[EverLink] Weekly report · {report.window_days}d · "
+               f"{report.links_healed} link(s) healed")
+
+    if report.is_empty:
+        text = (
+            f"EverLink weekly report — last {report.window_days} day(s)\n\n"
+            "Nothing to report yet: no scans or decisions landed in this window. Once "
+            "the nightly patrol runs and the queue sees decisions, this fills in "
+            "automatically.\n" + (f"\nFull report : {link}" if link else ""))
+        body = (
+            f"<div style='font-family:ui-sans-serif,system-ui,Arial;max-width:600px;margin:0 auto;"
+            f"border:1px solid #e4e4e7;border-radius:12px;padding:20px'>"
+            f"<h2 style='margin:0 0 4px;font-size:18px;color:#18181b'>EverLink weekly report</h2>"
+            f"<div style='color:#a1a1aa;font-size:12px;margin-bottom:14px'>{html.escape(day)} · last {report.window_days} day(s)</div>"
+            f"<p style='margin:0;color:#3f3f46;font-size:14px'>Nothing to report yet — no scans "
+            f"or decisions in this window.</p></div>")
+        return Note(subject=subject, text=text, html=body)
+
+    stats = [
+        ("Links healed", report.links_healed),
+        ("Slots fixed", report.slots_affected_by_applied),
+        ("Decisions created", report.decisions_created),
+        ("Decisions decided", report.decisions_decided),
+    ]
+    lines = [f"EverLink weekly report — last {report.window_days} day(s)", ""]
+    lines += [f"{label:<18}: {val}" for label, val in stats]
+    if report.by_status:
+        lines += ["", "By status : " + ", ".join(
+            f"{k} {v}" for k, v in _sorted_counts(report.by_status))]
+    if report.by_action:
+        lines.append("By action : " + ", ".join(
+            f"{_action(k)} {v}" for k, v in _sorted_counts(report.by_action)))
+    if report.audit_events:
+        lines.append("Audit     : " + ", ".join(
+            f"{k} {v}" for k, v in _sorted_counts(report.audit_events)))
+    lines += ["", f"Full report : {link}" if link else "Full report : (EVERLINK_BOARD_URL not set)",
+              '"You approve decisions, not links."']
+    text = "\n".join(lines)
+
+    stat_html = "".join(
+        f"<div style='flex:1;min-width:120px;border:1px solid #e4e4e7;border-radius:10px;padding:12px'>"
+        f"<div style='color:#a1a1aa;font-size:12px'>{html.escape(label)}</div>"
+        f"<div style='color:#18181b;font-size:20px;font-weight:600'>{val}</div></div>"
+        for label, val in stats)
+
+    def _breakdown(title: str, counts: dict[str, int], labeler=lambda k: k) -> str:
+        if not counts:
+            return ""
+        total = sum(counts.values()) or 1
+        rows = "".join(
+            f"<div style='display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:#3f3f46'>"
+            f"<span>{html.escape(labeler(k))}</span>"
+            f"<span style='color:#71717a'>{v} · {round(v * 100 / total)}%</span></div>"
+            for k, v in _sorted_counts(counts))
+        return (f"<div style='margin-top:14px'><div style='font-size:13px;font-weight:600;"
+                f"color:#18181b;margin-bottom:4px'>{html.escape(title)}</div>{rows}</div>")
+
+    cta = (
+        f"<a href='{html.escape(link, quote=True)}' style='background:#0ea5e9;color:#fff;text-decoration:none;"
+        f"padding:9px 16px;border-radius:8px;font-size:14px'>Open the full report</a>" if link else "")
+    body = (
+        f"<div style='font-family:ui-sans-serif,system-ui,Arial;max-width:600px;margin:0 auto;"
+        f"border:1px solid #e4e4e7;border-radius:12px;padding:20px'>"
+        f"<h2 style='margin:0 0 4px;font-size:18px;color:#18181b'>EverLink weekly report</h2>"
+        f"<div style='color:#a1a1aa;font-size:12px;margin-bottom:14px'>{html.escape(day)} · last {report.window_days} day(s)</div>"
+        f"<div style='display:flex;gap:10px;flex-wrap:wrap'>{stat_html}</div>"
+        f"{_breakdown('Decisions by status', report.by_status)}"
+        f"{_breakdown('Decisions by action', report.by_action, _action)}"
+        f"{_breakdown('Audit events', report.audit_events)}"
+        f"<p style='margin:16px 0 0'>{cta}</p>"
+        f"<p style='margin:14px 0 0;color:#a1a1aa;font-size:12px'>You approve decisions, not links.</p>"
+        f"</div>")
+    return Note(subject=subject, text=text, html=body)
+
+
 # --------------------------------------------------------------------------- #
 # config
 # --------------------------------------------------------------------------- #
@@ -408,6 +525,9 @@ class Notifier:
 
     def push_morning_brief(self, brief: MorningBrief) -> list[DeliveryResult]:
         return self.deliver(compose_morning_brief(brief, self.config.board_url))
+
+    def push_weekly_report(self, report: WeeklyReport) -> list[DeliveryResult]:
+        return self.deliver(compose_weekly_report(report, self.config.board_url))
 
     def push_decision_cards(self, cards: Iterable[Decision]) -> tuple[list[DeliveryResult], RouteResult]:
         """Risk-route then push: one message per medium/high card, one batch list for low."""
