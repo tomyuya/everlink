@@ -53,7 +53,7 @@ _GUIDE = "Tool call cancelled by EverLink steering [{policy}]. {reason}"
 # --------------------------------------------------------------------------- #
 # event -> domain object extraction (defensive; hooks must never raise)
 # --------------------------------------------------------------------------- #
-def _slot_from_event(event: BeforeToolCallEvent) -> Optional[LinkSlot]:
+def slot_from_event(event: BeforeToolCallEvent) -> Optional[LinkSlot]:
     """Reconstruct the LinkSlot the orchestrator threaded via invocation_state."""
     raw = (event.invocation_state or {}).get("slot")
     if isinstance(raw, LinkSlot):
@@ -66,7 +66,7 @@ def _slot_from_event(event: BeforeToolCallEvent) -> Optional[LinkSlot]:
     return None
 
 
-def _proposal_from_event(event: BeforeToolCallEvent) -> Optional[Proposal]:
+def proposal_from_event(event: BeforeToolCallEvent) -> Optional[Proposal]:
     """Return the Judge's Proposal iff this event is the structured-output call."""
     if event.tool_use.get("name") != _PROPOSAL_TOOL:
         return None
@@ -79,7 +79,7 @@ def _proposal_from_event(event: BeforeToolCallEvent) -> Optional[Proposal]:
         return None
 
 
-def _guide(event: BeforeToolCallEvent, policy_name: str, reason: str) -> None:
+def guide(event: BeforeToolCallEvent, policy_name: str, reason: str) -> None:
     """Cancel the tool call and steer the model (Guide pattern)."""
     event.cancel_tool = _GUIDE.format(policy=policy_name, reason=reason)
 
@@ -101,13 +101,13 @@ def disclosure_policy(event: BeforeToolCallEvent) -> None:
     explicit marker / regex-keyword). If the Judge proposed a modifying action on a
     protected slot we cancel and steer it to ESCALATE_HUMAN.
     """
-    slot = _slot_from_event(event)
-    proposal = _proposal_from_event(event)
+    slot = slot_from_event(event)
+    proposal = proposal_from_event(event)
     if slot is None or proposal is None:
         return
     violation = policy.disclosure_violation(slot, proposal)
     if violation:
-        _guide(event, "disclosure_policy",
+        guide(event, "disclosure_policy",
                f"{violation} Re-decide with action=ESCALATE_HUMAN; disclosure-bearing "
                f"blocks are never edited or dropped by an agent.")
 
@@ -119,13 +119,13 @@ def scope_policy(event: BeforeToolCallEvent) -> None:
     oracle is ``policy.scope_violation``; on a hit we cancel and steer to
     REWRITE_SENTENCE or ESCALATE_HUMAN.
     """
-    slot = _slot_from_event(event)
-    proposal = _proposal_from_event(event)
+    slot = slot_from_event(event)
+    proposal = proposal_from_event(event)
     if slot is None or proposal is None:
         return
     violation = policy.scope_violation(slot, proposal)
     if violation:
-        _guide(event, "scope_policy",
+        guide(event, "scope_policy",
                f"{violation} Re-decide with REWRITE_SENTENCE (downgrade the claim) or "
                f"ESCALATE_HUMAN; never REPLACE_URL a reference link.")
 
@@ -156,12 +156,12 @@ def _editorial_violation(event: BeforeToolCallEvent, proposal: Proposal) -> Opti
 
 def editorial_policy(event: BeforeToolCallEvent) -> None:
     """spec §4.3-2: guard the structural integrity of a rewrite/replace proposal."""
-    proposal = _proposal_from_event(event)
+    proposal = proposal_from_event(event)
     if proposal is None:
         return
     violation = _editorial_violation(event, proposal)
     if violation:
-        _guide(event, "editorial_policy",
+        guide(event, "editorial_policy",
                f"{violation} Re-decide with the corrected content, or ESCALATE_HUMAN if "
                f"no rule-preserving rewrite exists.")
 
@@ -184,12 +184,12 @@ def make_write_gate(is_approved: Callable[[str], bool],
         decision_id = (event.tool_use.get("input") or {}).get("decision_id")
         tool = event.tool_use.get("name")
         if not decision_id:
-            _guide(event, "write_gate",
+            guide(event, "write_gate",
                    f"{tool} requires an approved decision_id; none was provided. "
                    f"Refusing to write to a site without a human-approved decision.")
             return
         if not is_approved(str(decision_id)):
-            _guide(event, "write_gate",
+            guide(event, "write_gate",
                    f"decision '{decision_id}' is not approved. Refusing to write; only "
                    f"a human-approved decision may mutate a site.")
     return write_gate

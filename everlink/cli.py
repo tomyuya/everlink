@@ -18,8 +18,9 @@ import argparse
 import json
 import sys
 
-from . import agents, steering
+from . import agents, cards, hitl, steering
 from .llm import BedrockNotConfigured, get_model
+from .queue import DbDecisionStore
 
 
 def _print_report(report: agents.ScanReport) -> None:
@@ -46,11 +47,29 @@ def _print_report(report: agents.ScanReport) -> None:
             print(f"                 {prop.rationale}")
 
 
-def _persist(report: agents.ScanReport, audit_records: list[dict]) -> int:
-    """Write slot_checks + audit_log rows to EverLink's own DB (guarded).
+def _open_db_store():
+    """Connect to EverLink's OWN guarded DB and return ``(conn, DbDecisionStore)``.
 
-    Returns slot_check rows written. Audit rows are appended best-effort so a
-    steering/tool trail survives the run (spec §5 audit_log).
+    The store is the durable async-Interrupt queue (spec §5 ``decisions``). Raises
+    ``RuntimeError`` if the DSN is unset so callers can degrade gracefully. The
+    caller owns ``conn`` and must close it.
+    """
+    from . import db
+
+    dsn = db.everlink_dsn()          # raises RuntimeError if unset
+    conn = db.connect(dsn)
+    db.ensure_schema(conn)
+    return conn, DbDecisionStore(conn)
+
+
+def _persist(report: agents.ScanReport, audit_records: list[dict],
+             decision_cards: list | None = None) -> tuple[int, int]:
+    """Write slot_checks + audit_log rows, and enqueue decision cards (all guarded).
+
+    Returns ``(slot_checks_written, cards_enqueued)``. Audit rows are appended
+    best-effort so a steering/tool trail survives the run (spec §5 audit_log).
+    Cards are enqueued idempotently (status=pending) as the durable Interrupt queue;
+    a re-scan never resurrects a card a human already decided.
     """
     from . import db
 
@@ -63,9 +82,12 @@ def _persist(report: agents.ScanReport, audit_records: list[dict]) -> int:
         for r in audit_records:
             db.insert_audit(conn, r.get("agent", ""), r.get("event", "tool_result"),
                             json.dumps(r, default=str))
+        enqueued = 0
+        if decision_cards:
+            enqueued = DbDecisionStore(conn).enqueue(decision_cards)
     finally:
         conn.close()
-    return len(report.checks)
+    return len(report.checks), enqueued
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
@@ -105,17 +127,122 @@ def cmd_scan(args: argparse.Namespace) -> int:
               f"{cancels} proposal(s) blocked/re-steered by hooks; "
               f"{len(audit.records)} tool call(s) audited.")
 
+    # Aggregate proposals into decision cards (spec §6): cross-article duplicates of
+    # the SAME dead link merge into ONE card, so the human reviews a problem once.
+    decision_cards = cards.build_decision_cards(report.proposals) if report.proposals else []
+    if decision_cards:
+        high = sum(1 for c in decision_cards if c.proposal.risk_level == "high")
+        print(f"\n  decision cards: {len(decision_cards)} distinct dead link(s) surfaced "
+              f"for human review ({high} high-risk -> single-card approval; "
+              f"{len(decision_cards) - high} batchable).")
+
     if args.dry_run:
         print("\n[2/2] --dry-run: nothing written to any database (read-only scan).")
         return 0
     try:
-        n = _persist(report, audit.records)
+        n, enqueued = _persist(report, audit.records, decision_cards)
     except RuntimeError as e:
         print(f"\n[2/2] skipped persistence: {e}", file=sys.stderr)
         return 0
-    print(f"\n[2/2] persisted {n} slot_checks (+{len(audit.records)} audit rows) "
-          f"to EverLink's operational DB.")
+    print(f"\n[2/2] persisted {n} slot_checks (+{len(audit.records)} audit rows) and "
+          f"enqueued {enqueued} decision card(s) [pending] to EverLink's operational DB.")
     return 0
+
+
+def cmd_decisions(args: argparse.Namespace) -> int:
+    """List decision cards + status counts (the async-Interrupt queue's read model).
+
+    ``--json`` emits the exact shape the pd3 board consumes, so this command is both
+    a demo/inspection surface and the panel's first backend probe.
+    """
+    try:
+        conn, store = _open_db_store()
+    except RuntimeError as e:
+        print(f"[everlink] decisions unavailable: {e}", file=sys.stderr)
+        return 2
+    try:
+        status = None if args.status == "all" else args.status
+        rows = store.list_by_status(status, limit=args.limit)
+        counts = store.counts()
+        if args.json:
+            print(json.dumps({"counts": counts, "decisions": [c.model_dump() for c in rows]},
+                             indent=2, default=str))
+            return 0
+        print(f"decision queue - counts by status: {counts or {}}")
+        if not rows:
+            print(f"  no '{status or 'all'}' decision cards.")
+            return 0
+        print(f"  showing {len(rows)} '{status or 'all'}' card(s):")
+        for c in rows:
+            print(f"   * {c.id}  [{c.status}]  {c.proposal.action} "
+                  f"(risk={c.proposal.risk_level})")
+            print(f"       slots: {','.join(c.affected_slot_ids)}")
+            print(f"       why  : {c.proposal.rationale}")
+            if c.status == "rejected" and c.reject_reason:
+                print(f"       rejected: {c.reject_reason}")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_decide(args: argparse.Namespace) -> int:
+    """Approve or reject ONE decision card — the human's async-Interrupt response.
+
+    This is the CLI twin of the pd3 board's approve/reject control: both call the
+    SAME ``DecisionStore`` transition, so an approval here is exactly what the worker
+    waits on. A rejection records the reason the agent remembers (spec §4.3).
+    """
+    if bool(args.approve) == bool(args.reject):
+        print("[everlink] decide: pass exactly one of --approve / --reject.", file=sys.stderr)
+        return 2
+    try:
+        conn, store = _open_db_store()
+    except RuntimeError as e:
+        print(f"[everlink] decide unavailable: {e}", file=sys.stderr)
+        return 2
+    try:
+        if args.approve:
+            ok = store.approve(args.id)
+            print(f"  {'approved' if ok else 'NOT approved (missing or not pending)'}: {args.id}")
+        else:
+            ok = store.reject(args.id, args.reason or "")
+            print(f"  {'rejected' if ok else 'NOT rejected (missing or not pending)'}: {args.id}")
+        return 0 if ok else 1
+    finally:
+        conn.close()
+
+
+def cmd_worker(args: argparse.Namespace) -> int:
+    """Poll the durable queue and dispatch APPROVED cards (the async-Interrupt track).
+
+    pd2 ships the queue + polling with a NULL handler: a claimed card is marked
+    'applied' without touching any site (the safe default). pe1 plugs the Writer
+    agent (snapshot -> apply_fix -> verify_fix) in as the handler. Every dispatch is
+    audited to audit_log over the same guarded connection.
+    """
+    try:
+        conn, store = _open_db_store()
+    except RuntimeError as e:
+        print(f"[everlink] worker unavailable: {e}", file=sys.stderr)
+        return 2
+    try:
+        worker = hitl.DecisionWorker(store, handler=hitl.null_handler,
+                                     audit_sink=steering.db_audit_sink(conn))
+        if args.once:
+            applied = worker.poll_once()
+            print(f"  worker: 1 poll -> {applied} approved decision(s) applied.")
+            return 0
+        print(f"  worker: polling every {args.interval}s "
+              f"(max_iterations={args.max_iterations or 'unbounded'}); Ctrl-C to stop.")
+        try:
+            total = worker.run(poll_interval=args.interval, max_iterations=args.max_iterations)
+        except KeyboardInterrupt:
+            print("\n  worker: stopped by operator.")
+            return 0
+        print(f"  worker: {total} approved decision(s) applied.")
+        return 0
+    finally:
+        conn.close()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -140,6 +267,28 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--include-internal", action="store_true",
                     help="generic adapter: also report same-host links")
     sc.set_defaults(func=cmd_scan)
+
+    dc = sub.add_parser("decisions", help="list decision cards (the async Interrupt queue)")
+    dc.add_argument("--status", choices=["all", "pending", "approved", "rejected",
+                                         "expired", "applied"], default="pending",
+                    help="filter by card status (default pending — the review inbox)")
+    dc.add_argument("--limit", type=int, default=100, help="max cards to list (default 100)")
+    dc.add_argument("--json", action="store_true", help="emit JSON (the pd3 board's read model)")
+    dc.set_defaults(func=cmd_decisions)
+
+    de = sub.add_parser("decide", help="approve or reject one decision card (human response)")
+    de.add_argument("id", help="decision card id (e.g. dec-abc123def0)")
+    _ar = de.add_mutually_exclusive_group(required=True)
+    _ar.add_argument("--approve", action="store_true", help="approve (the worker will apply it)")
+    _ar.add_argument("--reject", action="store_true", help="reject (records --reason)")
+    de.add_argument("--reason", default="", help="rejection reason the agent remembers")
+    de.set_defaults(func=cmd_decide)
+
+    wk = sub.add_parser("worker", help="poll + dispatch approved decisions (async track)")
+    wk.add_argument("--once", action="store_true", help="drain once and exit (no poll loop)")
+    wk.add_argument("--interval", type=float, default=5.0, help="seconds between polls")
+    wk.add_argument("--max-iterations", type=int, default=None, help="stop after N polls")
+    wk.set_defaults(func=cmd_worker)
     return ap
 
 

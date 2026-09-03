@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS decisions (
   id TEXT PRIMARY KEY,                   -- decision card id
   affected_slot_ids TEXT NOT NULL,       -- JSON array (cross-article / cross-site merged card)
   proposal TEXT NOT NULL,                -- JSON: {action, new_url, new_anchor, new_sentence, rationale, risk_level}
-  status TEXT NOT NULL DEFAULT 'pending',-- pending | approved | rejected | expired
+  status TEXT NOT NULL DEFAULT 'pending',-- pending | approved | rejected | expired | applied
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   decided_at TIMESTAMPTZ,
   reject_reason TEXT

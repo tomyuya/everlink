@@ -68,10 +68,16 @@ class Proposal(BaseModel):
 
 
 class Decision(BaseModel):
-    """A surfaced decision card (spec §5 decisions); may merge several slots."""
+    """A surfaced decision card (spec §5 decisions); may merge several slots.
+
+    Lifecycle: ``pending`` -> ``approved`` -> ``applied`` (worker executed it), or
+    ``pending`` -> ``rejected`` (human declined, with a reason the agent remembers),
+    or ``pending`` -> ``expired`` (stale, never decided). ``applied`` is EverLink's
+    terminal success state; it is what stops the async worker re-claiming a card.
+    """
 
     id: str
     affected_slot_ids: list[str]
     proposal: Proposal
-    status: Literal["pending", "approved", "rejected", "expired"] = "pending"
+    status: Literal["pending", "approved", "rejected", "expired", "applied"] = "pending"
     reject_reason: Optional[str] = None
