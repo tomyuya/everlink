@@ -95,5 +95,5 @@ type-checks by default.
 
 This board renders whatever is in the decision queue. With no seeded data it shows empty
 states — that is expected, not a bug. To see it populated, run a scan
-(`python -m everlink.cli scan`) or the pf2 seed script against EverLink's own database.
-The board never fabricates decisions, evidence, or metrics.
+(`python -m everlink scan`) or the demo seed script (`python scripts/seed_demo.py`)
+against EverLink's own database. The board never fabricates decisions, evidence, or metrics.
