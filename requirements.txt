@@ -2,7 +2,10 @@
 # Verified working versions from Phase A setup.
 
 # --- agent framework (hard requirement: Strands Agents SDK) ---
-strands-agents==1.54.0
+# [openai] extra pulls the `openai` package (Strands OpenAIResponsesModel, used by the
+# Bedrock Mantle judge) + aws-bedrock-token-generator (IAM-minted mantle tokens).
+# Without it the mantle judge ImportErrors in the production image.
+strands-agents[openai]==1.54.0
 
 # --- AWS / Bedrock ---
 boto3>=1.35.0

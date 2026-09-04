@@ -36,6 +36,10 @@ T = TypeVar("T", bound=BaseModel)
 # the README can demonstrate Strands' "any model" provider-swap selling point.
 DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 DEFAULT_REGION = "us-east-1"
+# Mantle judge model. qwen3-next-80b-instruct is NON-reasoning, so it emits no
+# reasoningContent — which is exactly what breaks gpt-oss on the deep Chat Completions
+# multi-turn loop the real judge (steering hooks + Strands recurse) drives. Stable wins.
+DEFAULT_MANTLE_MODEL_ID = "qwen.qwen3-next-80b-a3b-instruct"
 
 
 class BedrockNotConfigured(RuntimeError):
@@ -78,6 +82,55 @@ def get_model(model_id: str | None = None, region_name: str | None = None) -> Mo
     mid = model_id or os.environ.get("BEDROCK_MODEL_ID") or DEFAULT_MODEL_ID
     region = region_name or os.environ.get("AWS_REGION") or DEFAULT_REGION
     return BedrockModel(model_id=mid, region_name=region)
+
+
+def get_mantle_model(model_id: str | None = None, region_name: str | None = None) -> Model:
+    """Return an OpenAI-compatible ``Model`` routed through Bedrock Mantle.
+
+    Mantle empirically bypasses the account-level Bedrock allowlist gate that
+    blocks ``BedrockModel`` on unsupported accounts (verified 2026-09-04: the same
+    credentials that get ``corporate customer`` on bedrock-runtime return HTTP 200
+    here). Still pure Strands SDK, so the hackathon's SDK requirement holds.
+
+    Two credential paths:
+      * IAM (production/cron): pass nothing; ``bedrock_mantle_config`` mints bearer
+        tokens on demand from the standard AWS chain, so long-running agents survive
+        the token's maximum lifetime (needs ``pip install strands-agents[openai]``).
+      * long/short-term key (local demo): set ``BEDROCK_MANTLE_API_KEY`` to a
+        console-minted key; used verbatim as the OpenAI client api_key.
+
+    Uses Chat Completions (``OpenAIModel``), NOT the Responses API: gpt-oss-120b's
+    ``/v1/responses`` rejects ``tool_choice="required"`` (accepts only ``auto``), and
+    ``required`` is exactly what Strands' structured-output forcing sends. The
+    ``/v1/chat/completions`` endpoint accepts ``required`` (verified 2026-09-04).
+    The default model is ``qwen.qwen3-next-80b-a3b-instruct`` (NON-reasoning): the real
+    judge drives a deep multi-turn loop (steering hooks + Strands ``recurse_event_loop``),
+    and gpt-oss's ``reasoningContent`` breaks that on Chat Completions — the simple
+    single-turn probe passes but the real scan raises ``StructuredOutputException``
+    (``reasoning_effort='none'`` is rejected by Harmony; ``low`` still emits reasoning).
+    qwen has none, so forced structured output stays clean turn after turn.
+    ``reasoning_effort`` is therefore omitted by default; set ``BEDROCK_MANTLE_REASONING``
+    (e.g. ``low``) only if you switch ``BEDROCK_MANTLE_MODEL_ID`` to a reasoning model and
+    accept its multi-turn limits.
+    """
+    from strands.models.openai import OpenAIModel
+
+    mid = model_id or os.environ.get("BEDROCK_MANTLE_MODEL_ID") or DEFAULT_MANTLE_MODEL_ID
+    region = region_name or os.environ.get("AWS_REGION") or DEFAULT_REGION
+    reasoning = os.environ.get("BEDROCK_MANTLE_REASONING", "")
+    params = {"reasoning_effort": reasoning} if reasoning else {}
+    api_key = os.environ.get("BEDROCK_MANTLE_API_KEY", "").strip()
+    if api_key:
+        # gpt-oss-* lines are served from the /v1 base path on Mantle.
+        return OpenAIModel(
+            client_args={
+                "base_url": f"https://bedrock-mantle.{region}.api.aws/v1",
+                "api_key": api_key,
+            },
+            model_id=mid,
+            params=params,
+        )
+    return OpenAIModel(bedrock_mantle_config={"region": region}, model_id=mid, params=params)
 
 
 class StubModel(Model):

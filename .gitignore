@@ -44,3 +44,4 @@ _commit_msg.txt
 probe_*.py
 discover_schema.py
 scripts/__pycache__/
+.vercel

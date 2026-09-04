@@ -21,7 +21,7 @@ import sys
 
 from . import agents, cards, hitl, notify, steering, writer
 from . import report as reporting
-from .llm import BedrockNotConfigured, get_model
+from .llm import BedrockNotConfigured, get_model, get_mantle_model
 from .queue import DbDecisionStore
 
 
@@ -109,6 +109,14 @@ def cmd_scan(args: argparse.Namespace) -> int:
             return 2
         judge = agents.build_judge(model, audit_sink=audit, enforce=enforce)
         backend = "bedrock"
+    elif args.judge == "mantle":
+        try:
+            model = get_mantle_model()
+        except Exception as e:  # noqa: BLE001 - token-mint / import failures surface here
+            print(f"[everlink] Mantle unavailable:\n{e}", file=sys.stderr)
+            return 2
+        judge = agents.build_judge(model, audit_sink=audit, enforce=enforce)
+        backend = "mantle"
 
     adapter_kwargs: dict = {}
     if args.max_pages is not None:
@@ -436,8 +444,9 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--rate-delay", type=float, default=1.0, help="seconds between requests")
     sc.add_argument("--timeout", type=float, default=15.0)
     sc.add_argument("--no-l2", action="store_true", help="L1 only (skip L2 page-parse)")
-    sc.add_argument("--judge", choices=["none", "stub", "bedrock"], default="none",
-                    help="none=detection only (default); stub=offline; bedrock=real LLM")
+    sc.add_argument("--judge", choices=["none", "stub", "bedrock", "mantle"], default="none",
+                    help="none=detection only (default); stub=offline; bedrock=real LLM; "
+                         "mantle=real LLM via Bedrock Mantle")
     sc.add_argument("--no-enforce", action="store_true",
                     help="disable spec §6 steering hooks on the Judge (they are ON by "
                          "default; enforcement blocks/re-steers unsafe proposals)")

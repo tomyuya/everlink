@@ -207,9 +207,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--sites", default="",
                     help="comma-separated scan targets (default: env EVERLINK_NIGHTLY_SITES "
                          "or aethelgem,sandcart,hotdeals)")
-    ap.add_argument("--judge", choices=["", "none", "stub", "bedrock"], default="",
+    ap.add_argument("--judge", choices=["", "none", "stub", "bedrock", "mantle"], default="",
                     help="Judge backend (default: env EVERLINK_JUDGE or bedrock). "
-                         "none=detection only, no creds; stub=offline fixture; bedrock=real LLM")
+                         "none=detection only, no creds; stub=offline fixture; bedrock=real LLM; "
+                         "mantle=real LLM via Bedrock Mantle (bypasses account allowlist gate)")
     ap.add_argument("--limit", type=int, default=25, help="max slots per site (default 25)")
     ap.add_argument("--no-l2", action="store_true", help="L1 only (skip the selective L2 fetch)")
     ap.add_argument("--channel", choices=["all", "email", "telegram"], default="all",
