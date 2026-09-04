@@ -1,15 +1,6 @@
 import type { AuditRow } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils";
-
-/** Pretty-print a JSON payload column, falling back to the raw string. */
-function pretty(payload: string | null): string {
-  if (!payload) return "";
-  try {
-    return JSON.stringify(JSON.parse(payload), null, 2);
-  } catch {
-    return payload;
-  }
-}
+import { AuditPayload } from "./audit-payload";
 
 /** Append-only audit trail (spec §5 `audit_log`) — who did what, when. */
 export function AuditTable({ rows }: { rows: AuditRow[] }) {
@@ -40,9 +31,7 @@ export function AuditTable({ rows }: { rows: AuditRow[] }) {
                 </code>
               </td>
               <td className="px-3 py-2">
-                <pre className="max-w-xl overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                  {pretty(r.payload)}
-                </pre>
+                <AuditPayload payload={r.payload} />
               </td>
             </tr>
           ))}
