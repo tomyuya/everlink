@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   title: "EverLink · Decision Board",
   description:
     "EverLink's minimal human-in-the-loop inbox: approve or reject the link-rot fixes that actually need a human.",
+  icons: { icon: "/everlink-logo.png", apple: "/everlink-logo.png" },
+  openGraph: { images: ["/everlink-logo.png"] },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Inbox, Link2, ScrollText } from "lucide-react";
+import { BarChart3, Inbox, ScrollText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
@@ -23,7 +24,13 @@ export function Nav() {
           href="/"
           className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100"
         >
-          <Link2 className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+          <Image
+            src="/everlink-logo.png"
+            alt="EverLink logo"
+            width={36}
+            height={24}
+            className="rounded-md ring-1 ring-zinc-200 dark:ring-zinc-800"
+          />
           <span>EverLink</span>
           <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
             Board
