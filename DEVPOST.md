@@ -89,9 +89,11 @@ production data).
   blocked or timed out is flagged `needs_human_recheck` — the agent never fabricates a
   result.
 - **"Any model," one seam** — every agent takes an injected `strands.models.Model`. The
-  submission runs `BedrockModel`, but the same seam accepts Anthropic / OpenAI / Gemini /
+  deployed nightly runs a **real Bedrock model** (qwen via AWS's Bedrock Mantle gateway,
+  which bypasses the account-level Anthropic allowlist gate that blocks direct SigV4
+  Claude), and the same seam accepts `BedrockModel` / Anthropic / OpenAI / Gemini /
   Mistral / Ollama / LiteLLM / SageMaker providers or a `ModelRouter` failover. The entire
-  253-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
+  254-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
   proof of provider-independence.
 - **OpenTelemetry** — optional tracing renders a run as one span tree (`run → {detect,
   judge, score}`), with Strands' own model/tool spans nested under the judge.
@@ -112,8 +114,9 @@ production data).
   sync gate for the demo and a durable decision queue for production — so autonomy never
   depends on a human being awake.
 - **Honesty about what's real.** Offline stub results prove detection and the guardrail
-  plumbing, *not* live LLM judgment. I keep the two clearly separated and score the real
-  Judge on Bedrock with the identical harness.
+  plumbing; the *live* LLM judgment now runs for real in production through Bedrock Mantle
+  (qwen), scored with the identical harness. I keep the offline and live paths clearly
+  separated so no stub result is ever passed off as model judgment.
 
 ### Accomplishments we're proud of
 
@@ -123,10 +126,30 @@ production data).
   prove the oracle isn't vacuous.
 - The **closed loop**: `verify_fix` re-probes after every write and rolls back on failure.
   On the seeded demo night, 37 dead links verify back to zero — and I show a rollback too.
-- **253 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
+- **254 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
   EverLink has never seen; a seeded live board so a judge never opens an empty inbox.
 - Six Mermaid **architecture diagrams** rendered natively on GitHub, and a secrets-clean
   repo (only `.env.example`, placeholders, gitignored data snapshots).
+
+### What we learned
+
+- **Autonomy is earned, not toggled.** EverLink's write access comes from three layers —
+  steering policies, a decision-id write gate, and a `verify_fix` re-probe — not from
+  trusting the model. We shipped the guardrails first and let autonomy grow inside them.
+- **"I can't tell" is a valid verdict.** Making `needs_human_recheck` first-class (instead
+  of guessing on blocked or timed-out pages) is what makes the agent trustworthy enough to
+  run unattended on production content.
+- **Detection and judgment are different jobs.** Deterministic code proves a link is dead;
+  deciding the fix is judgment. Keeping them separate — and scoring them with separate
+  harnesses — kept our evals honest about what the stub proves and what only a live model
+  (or a human) can.
+- **Humans should approve decisions, not links.** Merging duplicate problems across
+  articles into one card turned forty interruptions into one. An empty inbox on a good
+  night is the product working, not a missing feature.
+- **Provider independence is availability.** When account-level Bedrock access stalled
+  mid-hackathon, the single injected-Model seam kept every nightly run alive and let me
+  swap in the Bedrock Mantle gateway (qwen) to restore a **real** LLM judge with zero
+  pipeline edits. The honesty-driven design doubled as resilience.
 
 ### What's next for EverLink
 
@@ -140,7 +163,7 @@ the inbox stays deliberately minimal — one screen, not a suite.
 
 `strands-agents` · `amazon-bedrock` · `anthropic-claude` · `python` · `next.js` ·
 `neon-postgres` · `vercel` · `railway` · `opentelemetry` · `pydantic` · `resend` ·
-`telegram-bot` · `scrapling`
+`telegram-bot`
 
 ## Links (fill at submit time)
 

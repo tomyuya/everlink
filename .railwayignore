@@ -1,0 +1,28 @@
+# railway up upload filter: ship ONLY what the agent image needs (code + data CSV +
+# Dockerfile + schema + requirements). board/ (Next.js -> Vercel), node_modules, tests,
+# VCS, docs and local scratch stay out so the upload is small and fast.
+.git
+.github
+.qoder
+.idea
+.vscode
+board
+tests
+runs
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.vercel
+.env
+.env.*
+*.md
+_*
+data/*.jsonl
+otel-*.json
+*.sqlite
+*.db

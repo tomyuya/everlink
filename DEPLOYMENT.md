@@ -124,9 +124,19 @@ EVERLINK_BOARD_URL=https://<your-board>.vercel.app   # linked from every notific
 
 # Cron tuning (all optional — sensible defaults are built in)
 EVERLINK_NIGHTLY_SITES=aethelgem,sandcart,hotdeals
-EVERLINK_JUDGE=bedrock          # none = detection only (no creds); stub = offline fixture
+EVERLINK_JUDGE=mantle          # deployed TODAY: real qwen via Bedrock Mantle. bedrock = direct Claude (SigV4); stub = offline fixture; none = detection only
 EVERLINK_WEEKLY_DAY=mon         # weekday the weekly digest folds into the nightly run
 ```
+
+> **Choosing `EVERLINK_JUDGE` (updated 2026-09-04).** The deployed nightly runs `mantle`:
+> a real LLM (qwen) served through AWS's **Bedrock Mantle** gateway
+> (`https://bedrock-mantle.<region>.api.aws/v1`), which bypasses the account-level
+> Anthropic allowlist gate that blocks direct `BedrockModel`/SigV4 calls
+> (`ValidationException: … unsupported countries …`) on accounts registered where Anthropic
+> does not serve. Mantle is still a Bedrock endpoint and still pure Strands SDK
+> (`OpenAIModel`), so detection, steering, the decision queue, the writer, the board *and
+> the per-problem judgment* all run for real. Use `bedrock` for direct Claude once the
+> account allowlist gate clears; `stub` remains for offline dev / CI / `--dry-run`.
 
 **Cron.** `railway.json` declares `cronSchedule: "0 3 * * *"` (Railway crons run in **UTC**) with
 `restartPolicyType: NEVER` (run once per schedule, then idle). Confirm/adjust it under

@@ -107,12 +107,13 @@ Every EverLink agent is built as `build_scanner(model)`, `build_judge(model)`,
 single seam ([`everlink/llm.py`](everlink/llm.py)). Nothing downstream (detection, steering
 hooks, decision queue, writer, evals) knows or cares which provider it is.
 
-Two providers ship in-repo:
+Three providers ship in-repo:
 
 | Provider | What it is | When it runs |
 |---|---|---|
-| `llm.get_model()` → `BedrockModel` | real Claude via Amazon Bedrock — the **submission path** | `verify_bedrock.py`, `--judge bedrock`, the production nightly |
-| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 253-test suite, all offline Evals, `--dry-run` |
+| `llm.get_mantle_model()` → `OpenAIModel` | **real LLM (qwen) via the Bedrock Mantle gateway** (`bedrock-mantle.<region>.api.aws`) — the **deployed production judge** | `--judge mantle`, the live nightly (verified green 2026-09-04: 3 sites × 25 slots, real proposals) |
+| `llm.get_model()` → `BedrockModel` | real Claude via Amazon Bedrock (direct SigV4) | `verify_bedrock.py`, `--judge bedrock`, once the account's Anthropic allowlist gate clears |
+| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 254-test suite, all offline Evals, `--dry-run` — **no longer** the production judge |
 
 **The swap experiment.** Because the seam is one injected `Model`, changing provider is a
 one-line change with no pipeline edit:
@@ -139,7 +140,33 @@ Strands' model layer is fully pluggable, so the same seam accepts any of its pro
 `ClassifierStrategy`) for multi-provider failover. EverLink stays Bedrock-first for the
 submission (spec §6) but is **not** Bedrock-locked.
 
-**Offline proof of provider-independence:** the entire 253-test suite *and* the 50-case
+### Bedrock access — an honest note (updated 2026-09-04)
+
+Direct Anthropic-on-Bedrock (`BedrockModel`, SigV4) is gated by the **AWS account's
+registration country and the request's source region**, not just credentials: an account
+registered where Anthropic does not serve gets `ValidationException: Access to Anthropic
+models is not allowed from unsupported countries…` on every call, even from a US container.
+
+**The production judge therefore runs through Bedrock Mantle** — AWS's OpenAI-compatible
+Bedrock gateway (`https://bedrock-mantle.<region>.api.aws/v1`), which empirically bypasses
+that account-level allowlist gate (verified 2026-09-04: the same credentials rejected by
+`bedrock-runtime` return HTTP 200 on Mantle). It is still a Bedrock endpoint and still pure
+Strands SDK (`strands.models.openai.OpenAIModel`), so the submission's "Strands + Bedrock"
+requirement holds with a **real LLM**, not a stub:
+
+```bash
+EVERLINK_JUDGE=mantle    # deployed nightly TODAY: real qwen judge via Bedrock Mantle
+EVERLINK_JUDGE=bedrock   # direct Claude (SigV4) once the account allowlist gate clears
+EVERLINK_JUDGE=stub      # offline fixture for dev / CI / --dry-run only
+```
+
+With `mantle`, the whole pipeline runs for real **and the per-problem judgment is a live
+LLM call**: the current nightly scans 3 first-party sites × 25 slots and the Mantle judge
+emits real structured proposals (REWRITE_SENTENCE / DROP_BLOCK / ESCALATE) whose rationale
+refuses to fabricate replacement URLs. `StubModel` stays first-class for the offline
+test/eval suite, but is **no longer** what runs in production.
+
+**Offline proof of provider-independence:** the entire 254-test suite *and* the 50-case
 Evals run on the injected `StubModel`, so the orchestration, steering, hooks, queue, and
 card merge are exercised with no cloud dependency. `scripts/verify_bedrock.py` is the one
 operator step that swaps in real Claude and confirms a live call (creds → model → real

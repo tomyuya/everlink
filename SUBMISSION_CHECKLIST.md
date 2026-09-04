@@ -40,7 +40,9 @@ click submit on Devpost). Those stay open by design and are the last mile.
 
 - [x] Repo contains **only** `.env.example` — no real `.env`. Verified: `git ls-files`
       lists no `.env` / `*.pem` / `*.key` / `*credentials*` / `*secrets*`, and none ever
-      appeared in history (`git log --all -- .env "*.csv" "*.pem" "*.key"` is empty).
+      appeared in history (`git log --all -- .env "*.pem" "*.key"` is empty). The committed
+      `data/slots_*.csv` hold only public url / anchor / slot_type / protected fields — no
+      secrets, tokens, or PII — so they do not weaken this audit.
 - [x] `gitleaks detect` (**or equivalent**) returns **zero** findings. The `gitleaks`
       binary is not installable offline here, so an equivalent ripgrep secret scan was run
       over the whole tracked surface: AWS keys (`AKIA`/`ASIA`), PEM private-key headers,
@@ -53,8 +55,10 @@ click submit on Devpost). Those stay open by design and are the last mile.
 - [x] README / code contain **no** production connection strings or credentials
       (placeholders only). The real production Blue-Neon host appears **nowhere** in the
       repo. `.env.example` ships empty secret fields + generic `user:pass@host-pooler` DSNs.
-- [x] Exported data snapshots (`data/*.csv`, `data/*.jsonl`) are **gitignored** — they carry
-      production content. Only the aggregate `data/slots_summary.json` is committed.
+- [x] Raw `data/*.jsonl` dumps stay **gitignored**. The first-party Scanner's read-only
+      `data/slots_*.csv` (public url / anchor / slot_type / protected flags — no secrets/PII)
+      ARE committed and baked into the private image so the nightly cron finds its slots
+      out-of-the-box (commit `4857cd3`); the aggregate `data/slots_summary.json` is committed too.
 - [ ] (owner) Demo video: any sensitive value (URLs, tokens, DB hosts) is masked/blurred —
       applies once the video is recorded.
 
@@ -84,7 +88,7 @@ click submit on Devpost). Those stay open by design and are the last mile.
 ---
 
 **Bottom line.** Every engineering deliverable through Phase **G** is implemented,
-tested (**253** passing tests), committed, and pushed. The secrets zero-leak audit
+tested (**254** passing tests), committed, and pushed. The secrets zero-leak audit
 **passes**. What remains is the human last mile: AWS Builder ID, flipping the repo
 public, recording the demo video, deploying the live board, publishing the blog, and
 clicking submit on Devpost — each with its draft/artifact already prepared.
