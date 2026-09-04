@@ -17,10 +17,12 @@ Nothing here re-implements detection, judging, writing, or notifying — so a cr
 byte-for-byte the same code path as the CLI, and the audit trail is identical.
 
 HONEST DEGRADATION (nothing is faked):
-  * ``--judge bedrock`` (the default) needs AWS/Bedrock creds; if they are missing the
+  * ``--judge mantle`` (the default) runs the real LLM via AWS's Bedrock Mantle gateway;
+    it needs ``BEDROCK_MANTLE_API_KEY`` (or AWS creds to mint a token). If unavailable the
     scan step exits 2 and this script reports the degradation and CONTINUES (detection
-    still ran). ``--judge none`` needs no creds and produces a real dead-link scan with
-    zero proposals; ``--judge stub`` is the offline fixture judge.
+    still ran). ``--judge bedrock`` is the direct SigV4 Claude path (account-allowlist
+    gated); ``--judge none`` needs no creds (real dead-link scan, zero proposals);
+    ``--judge stub`` is the offline fixture judge.
   * ``--dry-run`` is the safe manual trigger (§12-5): scan writes nothing, notify sends
     nothing, and the worker step is SKIPPED (it writes; its own safe no-op is
     ``everlink worker --handler null``). Use it to prove the chain is wired offline.
@@ -28,7 +30,7 @@ HONEST DEGRADATION (nothing is faked):
     a source-site or forbidden host is refused exactly as in the CLI.
 
 Usage:
-    python scripts/nightly.py                          # real nightly (bedrock judge)
+    python scripts/nightly.py                          # real nightly (mantle judge)
     python scripts/nightly.py --dry-run --judge none   # offline smoke, no writes/sends
     python scripts/nightly.py --sites aethelgem --weekly --days 7
 """
@@ -46,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from everlink import cli  # noqa: E402
 
 DEFAULT_SITES = ("aethelgem", "sandcart", "hotdeals")   # scan all three read-only (spec §4.1)
-DEFAULT_JUDGE = "bedrock"                                # the real nightly uses the LLM judge
+DEFAULT_JUDGE = "mantle"                                # the real nightly uses the LLM judge
 DEFAULT_WEEKLY_DAY = "mon"                               # fold the weekly digest in on Mondays
 
 
@@ -85,7 +87,7 @@ def _sites(args: argparse.Namespace) -> list[str]:
 
 
 def _judge(args: argparse.Namespace) -> str:
-    """Resolve the Judge backend: --judge wins, then env, then the real Bedrock judge."""
+    """Resolve the Judge backend: --judge wins, then env, then DEFAULT_JUDGE (mantle)."""
     return args.judge or os.environ.get("EVERLINK_JUDGE") or DEFAULT_JUDGE
 
 
@@ -208,9 +210,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="comma-separated scan targets (default: env EVERLINK_NIGHTLY_SITES "
                          "or aethelgem,sandcart,hotdeals)")
     ap.add_argument("--judge", choices=["", "none", "stub", "bedrock", "mantle"], default="",
-                    help="Judge backend (default: env EVERLINK_JUDGE or bedrock). "
-                         "none=detection only, no creds; stub=offline fixture; bedrock=real LLM; "
-                         "mantle=real LLM via Bedrock Mantle (bypasses account allowlist gate)")
+                    help="Judge backend (default: env EVERLINK_JUDGE or mantle). "
+                         "mantle=real LLM via Bedrock Mantle (deployed default; bypasses the "
+                         "account allowlist gate); bedrock=direct SigV4 Claude (account-gated); "
+                         "stub=offline fixture; none=detection only, no creds")
     ap.add_argument("--limit", type=int, default=25, help="max slots per site (default 25)")
     ap.add_argument("--no-l2", action="store_true", help="L1 only (skip the selective L2 fetch)")
     ap.add_argument("--channel", choices=["all", "email", "telegram"], default="all",

@@ -80,7 +80,7 @@ def test_plan_steps_default_nightly_chain():
     plan = nightly.plan_steps(_ns(), today=WED)
     assert _labels(plan) == ["scan:aethelgem", "scan:sandcart", "scan:hotdeals", "notify", "worker"]
     assert _argv(plan, "scan:aethelgem") == [
-        "scan", "--site", "aethelgem", "--judge", "bedrock", "--limit", "25"]
+        "scan", "--site", "aethelgem", "--judge", "mantle", "--limit", "25"]
     assert _argv(plan, "notify") == ["notify"]
     assert _argv(plan, "worker") == ["worker", "--once", "--handler", "writer"]
     assert len(plan.executed) == 5 and not plan.skipped
