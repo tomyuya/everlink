@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Inbox, ScrollText } from "lucide-react";
@@ -24,12 +23,13 @@ export function Nav() {
           href="/"
           className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100"
         >
-          <Image
-            src="/everlink-logo.png"
+          {/* Vector mark: crisp at nav size (the raster illustration blurs when small). */}
+          <img
+            src="/everlink-mark.svg"
             alt="EverLink logo"
-            width={36}
-            height={24}
-            className="rounded-md ring-1 ring-zinc-200 dark:ring-zinc-800"
+            width={28}
+            height={28}
+            className="h-7 w-7 rounded-md"
           />
           <span>EverLink</span>
           <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">

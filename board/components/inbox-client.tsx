@@ -157,7 +157,7 @@ export function InboxClient({
       {decisions.length === 0 ? (
         <EmptyState
           title={`No ${status === "all" ? "" : status} decisions`}
-          hint="EverLink only surfaces a card when a fix genuinely needs a human. An empty inbox is the goal."
+          hint="An empty inbox is the goal — EverLink only surfaces a card when a fix genuinely needs a human. See the pipeline and Automation panel above for what runs behind the scenes."
           icon={<InboxIcon className="h-8 w-8" />}
         />
       ) : (

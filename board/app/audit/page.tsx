@@ -42,7 +42,7 @@ export default async function AuditPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           title="No audit events yet"
-          hint="Run a scan (python -m everlink.cli scan) and events will appear here."
+          hint="Events appear as soon as the nightly loop runs. See the Automation panel on the home page for the exact entrypoint and what each run records."
           icon={<ScrollText className="h-8 w-8" />}
         />
       ) : (
