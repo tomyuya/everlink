@@ -20,6 +20,7 @@ Use in tests:    srv = make_server(port=0); thread it; srv.server_address[1].
 from __future__ import annotations
 
 import argparse
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -214,7 +215,13 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
 
 def make_server(port: int = FIXTURE_PORT_DEFAULT, host: str = HOST) -> ThreadingHTTPServer:
-    """Build (but do not start) a fixture HTTP server. port=0 -> ephemeral."""
+    """Build (but do not start) a fixture HTTP server. port=0 -> ephemeral.
+
+    Side-effect: sets ``EVERLINK_ALLOW_LOCALNET=1`` so the SSRF guard permits
+    requests to 127.0.0.1 (the fixture server itself). Production never calls
+    this function, so the env var stays unset and the guard is fully active.
+    """
+    os.environ.setdefault("EVERLINK_ALLOW_LOCALNET", "1")
     return ThreadingHTTPServer((host, port), FixtureHandler)
 
 

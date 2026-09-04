@@ -41,6 +41,7 @@ export function DecisionActions({
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
       setBusy(false);
     }
   }

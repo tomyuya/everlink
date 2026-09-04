@@ -13,6 +13,7 @@ from the source-site DSNs in the environment (see .env.example).
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -143,8 +144,6 @@ def upsert_link_slots(conn, slots: list[LinkSlot]) -> int:
 
 def insert_slot_check(conn, result: CheckResult) -> None:
     """Append one probe outcome to slot_checks."""
-    import json
-
     _assert_writable(conn.info.dsn or "")
     chain_json = json.dumps([h.model_dump() for h in result.redirect_chain])
     sql = (
@@ -259,8 +258,6 @@ def update_slot_content(conn, slot_id: str, content: dict) -> bool:
 def insert_write_snapshot(conn, slot_id: str, decision_id: str,
                           before: dict, after: dict) -> int:
     """Record a before/after write snapshot; returns its id. Caller's transaction."""
-    import json
-
     _assert_writable(conn.info.dsn or "")
     sql = ("INSERT INTO write_snapshots (slot_id, decision_id, before_json, after_json) "
            "VALUES (%s, %s, %s, %s) RETURNING id")

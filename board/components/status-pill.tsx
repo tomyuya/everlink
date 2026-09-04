@@ -1,6 +1,8 @@
 import type { DecisionStatus } from "@/lib/types";
 import { STATUS_META, cn } from "@/lib/utils";
 
+const FALLBACK_META = { label: "Unknown", className: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 ring-zinc-500/30" };
+
 export function StatusPill({
   status,
   className,
@@ -8,7 +10,7 @@ export function StatusPill({
   status: DecisionStatus;
   className?: string;
 }) {
-  const meta = STATUS_META[status];
+  const meta = STATUS_META[status] ?? FALLBACK_META;
   return (
     <span
       className={cn(

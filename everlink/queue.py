@@ -297,7 +297,11 @@ class DbDecisionStore(DecisionStore):
         return n > 0
 
     def claim_next_approved(self) -> Optional[Decision]:
-        # FIFO by decision time; SKIP LOCKED keeps multiple workers from double-claiming.
+        # FIFO by decision time.  SKIP LOCKED avoids *blocking* when multiple workers
+        # poll concurrently (each sees a different row), but because we commit
+        # immediately after the SELECT the row-lock lifetime is microseconds — so
+        # true double-claim prevention relies on at-least-once semantics + the
+        # idempotent mark_applied/reject_approved transitions downstream.
         sql = (f"SELECT {_SELECT_COLS} FROM decisions WHERE status = %s "
                f"ORDER BY decided_at ASC, created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED")
         with self._cur() as cur:

@@ -22,6 +22,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+from .ssrf import SsrfBlocked, guard_url, httpx_request_guard
+
 L2Verdict = Literal["ok", "dead", "price_anomaly", "unavailable", "blocked"]
 
 # Lowercased substring signals. Ordered by precedence inside each class.
@@ -188,9 +190,12 @@ def _fetch_httpx(url: str, timeout: float,
         import httpx
 
         with httpx.Client(timeout=timeout, headers=hdrs, follow_redirects=True,
-                          trust_env=_trust_env()) as client:
+                          trust_env=_trust_env(),
+                          event_hooks={"request": [httpx_request_guard]}) as client:
             r = client.get(url)
             return r.status_code, r.text, None
+    except SsrfBlocked as e:
+        return None, "", f"ssrf_blocked: {e.reason}"
     except Exception as e:  # noqa: BLE001
         return None, "", f"httpx fetch failed: {type(e).__name__}: {e}"
 
@@ -228,6 +233,12 @@ def fetch_page(url: str, *, timeout: float = 20.0, engine: str = "auto",
     needs_human_recheck rather than guessing.
     """
     hdrs = headers or _stealthy_headers()
+
+    # SSRF pre-check: refuse internal targets before any network I/O.
+    try:
+        guard_url(url)
+    except SsrfBlocked as e:
+        return None, "", f"ssrf_blocked: {e.reason}"
 
     if engine == "scrapling":
         return _fetch_scrapling(url, timeout)

@@ -19,6 +19,7 @@ from urllib.parse import urlparse, parse_qs
 import httpx
 
 from .model import CheckResult, LinkSlot, RedirectHop, Verdict
+from .ssrf import SsrfBlocked, guard_url
 
 # Query params that carry affiliate/tracking attribution.
 AFFILIATE_PARAMS = {
@@ -141,6 +142,11 @@ def probe_url(url: str, slot_id: str = "", *, timeout: float = 15.0,
                                  trust_env=_trust_env())
     try:
         for _ in range(max_hops):
+            try:
+                guard_url(current)
+            except SsrfBlocked as e:
+                error = f"ssrf_blocked: {e.reason}"
+                break
             try:
                 resp = cli.get(current)
             except httpx.HTTPError as e:

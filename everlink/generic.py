@@ -34,6 +34,7 @@ import httpx
 
 from .model import LinkSlot, SlotType
 from .probes import AFFILIATE_PARAMS
+from .ssrf import httpx_request_guard
 
 DEFAULT_UA = ("EverLinkBot/1.0 (+https://github.com/tomyuya/everlink) "
               "read-only link-rot checker")
@@ -164,7 +165,8 @@ def _headers(ua: Optional[str] = None) -> dict[str, str]:
 
 def _client(timeout: float, headers: Optional[dict] = None) -> httpx.Client:
     return httpx.Client(timeout=timeout, headers=headers or _headers(),
-                        follow_redirects=True, trust_env=_trust_env())
+                        follow_redirects=True, trust_env=_trust_env(),
+                        event_hooks={"request": [httpx_request_guard]})
 
 
 def _decode_body(content: bytes) -> str:

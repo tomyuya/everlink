@@ -1,6 +1,8 @@
 import type { RiskLevel } from "@/lib/types";
 import { RISK_META, cn } from "@/lib/utils";
 
+const FALLBACK_META = { label: "Unknown", className: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 ring-zinc-500/30" };
+
 export function RiskBadge({
   risk,
   className,
@@ -8,7 +10,7 @@ export function RiskBadge({
   risk: RiskLevel;
   className?: string;
 }) {
-  const meta = RISK_META[risk];
+  const meta = RISK_META[risk] ?? FALLBACK_META;
   return (
     <span
       className={cn(

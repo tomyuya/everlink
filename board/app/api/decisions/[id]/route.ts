@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { errorResponse } from "@/lib/api";
+import { isReadonly } from "@/lib/db";
 import {
   approveDecision,
   getDecisionWithEvidence,
@@ -31,8 +32,18 @@ export async function GET(_request: Request, { params }: Ctx) {
 export async function PATCH(request: Request, { params }: Ctx) {
   const { id } = await params;
   try {
+    if (isReadonly()) {
+      return NextResponse.json({ error: "Board is in read-only mode" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
-    const action: "approve" | "reject" = body?.action === "reject" ? "reject" : "approve";
+    const rawAction = body?.action;
+    if (rawAction !== "approve" && rawAction !== "reject") {
+      return NextResponse.json(
+        { error: "action must be exactly 'approve' or 'reject'" },
+        { status: 400 },
+      );
+    }
+    const action: "approve" | "reject" = rawAction;
     const reason = typeof body?.reason === "string" ? body.reason : "";
 
     const changed =

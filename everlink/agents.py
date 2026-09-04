@@ -217,7 +217,7 @@ def build_stub_judge(hooks: Optional[list] = None, callback_handler=None,
         "action": "ESCALATE_HUMAN",
         "rationale": ("[offline stub judge] detection-only run; a stub cannot verify "
                       "a replacement, so it escalates rather than fabricate a fix. "
-                      "Use --judge bedrock for real proposals."),
+                      "Use --judge mantle for real proposals."),
         "risk_level": "high",
     })
     return build_judge(model, hooks=hooks, callback_handler=callback_handler,
@@ -361,7 +361,7 @@ class ScanReport(BaseModel):
     slots: list[LinkSlot] = Field(default_factory=list)
     checks: list[CheckResult] = Field(default_factory=list)
     proposals: list[SlotProposal] = Field(default_factory=list)
-    judge_backend: str = "none"          # none | stub | bedrock
+    judge_backend: str = "none"          # none | stub | mantle | bedrock
 
     def problems(self) -> list[CheckResult]:
         return [c for c in self.checks if c.final_verdict != "healthy"]

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { errorResponse } from "@/lib/api";
+import { isReadonly } from "@/lib/db";
 import { batchDecide, listDecisions, statusCounts } from "@/lib/queries";
 import type { DecisionStatus } from "@/lib/types";
 
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const raw = url.searchParams.get("status") ?? "pending";
     const status = (VALID.has(raw) ? raw : "pending") as DecisionStatus | "all";
-    const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 100)));
+    const limit = Math.min(500, Math.max(1, Math.round(Number(url.searchParams.get("limit") ?? 100))));
 
     const [decisions, counts] = await Promise.all([
       listDecisions(status, Number.isFinite(limit) ? limit : 100),
@@ -38,15 +39,28 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
+    if (isReadonly()) {
+      return NextResponse.json({ error: "Board is in read-only mode" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const ids: string[] = Array.isArray(body?.ids)
       ? body.ids.filter((x: unknown): x is string => typeof x === "string")
       : [];
-    const action: "approve" | "reject" = body?.action === "reject" ? "reject" : "approve";
+    const rawAction = body?.action;
+    if (rawAction !== "approve" && rawAction !== "reject") {
+      return NextResponse.json(
+        { error: "action must be exactly 'approve' or 'reject'" },
+        { status: 400 },
+      );
+    }
+    const action: "approve" | "reject" = rawAction;
     const reason = typeof body?.reason === "string" ? body.reason : "";
 
     if (!ids.length) {
       return NextResponse.json({ error: "ids (non-empty array) required" }, { status: 400 });
+    }
+    if (ids.length > 500) {
+      return NextResponse.json({ error: "ids array exceeds maximum of 500" }, { status: 400 });
     }
 
     const result = await batchDecide(ids, action, reason);
