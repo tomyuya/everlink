@@ -13,7 +13,7 @@ It is not another broken-link *reporter* — it is a link *steward*.
 
 **Docs:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (diagrams) · [`EVALS_REPORT.md`](EVALS_REPORT.md)
 (eval evidence) · [`DEPLOYMENT.md`](DEPLOYMENT.md) (runbook) · [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md)
-(phase gate).
+(phase gate) · [`CONTRIBUTING.md`](CONTRIBUTING.md) (dev workflow & house rules).
 
 ---
 
@@ -251,9 +251,17 @@ copy .env.example .env    # then fill in real values; NEVER commit .env
 python scripts/verify_strands.py     # offline: imports, hooks, conversation manager, @tool
 python scripts/verify_bedrock.py     # real: creds -> model -> live Claude call (exit 0/2/3)
 
-# 5. Run the loop OFFLINE (no AWS creds): scan -> detect -> judge on the StubModel
-python -m everlink scan --site aethelgem --limit 20 --judge stub --dry-run
-python -m everlink decisions --status pending --json   # the board's read model
+# 5. Run the loop OFFLINE with ZERO setup (no DB, no CSV, no AWS creds, no internet):
+#    terminal 1 — the bundled fixture site with known ground truth:
+python scripts/fixture_server.py              # http://127.0.0.1:8787
+#    terminal 2 — scan it (localhost needs the documented SSRF opt-in):
+set EVERLINK_ALLOW_LOCALNET=1                 # Windows; `export` on macOS/Linux
+python -m everlink scan --site http://127.0.0.1:8787/link-farm --include-internal --judge stub --dry-run
+#    -> dead / soft-404 / price-anomaly / program_ended verdicts with evidence chains,
+#       honest stub proposals, and 3 decision cards. Nothing is written anywhere.
+#    Point it at YOUR site instead (live crawl, respects robots.txt):
+python -m everlink scan --site https://your-site.com/sitemap.xml --judge stub --dry-run
+python -m everlink decisions --status pending --json   # the board's read model (needs .env DSN)
 
 # 6. Score the agent (spec §8) — 30-case v1 subset, or the FULL 50-case Phase F set
 python scripts/run_evals.py --full
@@ -272,11 +280,30 @@ python -m everlink worker --once               # apply approved: snapshot -> app
 python -m everlink report --days 7             # weekly report (the board /report numbers)
 
 # 9. Approval inbox (Next.js board)
-cd board && npm install && npm run dev         # http://localhost:3000
+cd board
+copy .env.example .env.local    # set EVERLINK_DATABASE_URL = EverLink's own Postgres
+npm install && npm run dev      # http://localhost:3000 (honest empty states without a DB)
 
 # 10. (Phase A) export the read-only LinkSlot snapshot from the three sites
 python scripts/export_slots.py
 ```
+
+## Development
+
+The whole gate is **offline**: the injected `StubModel` plus an in-process fixture server
+mean the tests and Evals need **no AWS creds and no database**.
+
+```bash
+python scripts/verify_strands.py                 # offline Strands SDK surface gate
+python -m pytest -q                              # full offline suite (agents/steering/hooks/queue/writer/ssrf/…)
+python scripts/run_evals.py --full               # 50-case eval harness (spec §8)
+cd board && npm run typecheck && npm run build   # board gate: tsc + next build, no DB needed
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs exactly these gates on every push and
+PR — the Python suite + `verify_strands.py`, then the board's `npm ci && typecheck &&
+build`. Workflow, honesty rules, and the PR checklist live in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Security & secrets
 

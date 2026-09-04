@@ -29,7 +29,8 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 
 | Route | Purpose |
 | --- | --- |
-| `/` | **Inbox** — filterable card list (pending/approved/applied/rejected/all) with multi-select + **batch approve/reject**. |
+| `/` | **Home** — the product at a glance: hero, live pipeline-health pulse, the six-stage pipeline diagram (Scan → Detect → Judge → You decide → Apply → Report), and the Automation panel documenting the nightly cron and its trigger commands. |
+| `/inbox` | **Inbox** — the working queue: filterable card list (pending/approved/applied/rejected/all) with multi-select + **batch approve/reject**; `?status=` deep-links each filter tab. |
 | `/decision/[id]` | **Card detail** — the proposal, its rationale, and the full **evidence chain** (slot → L1 HTTP probe → redirect chain → L2 verdict → final verdict), plus single-card approve/reject. |
 | `/audit` | **Audit trail** — the append-only `audit_log`, newest first. |
 | `/report` | **Weekly report** — live aggregates (links healed, slots fixed, decisions by status/action, audit events) over a 7/14/30-day window. pe3's scheduled digest reports these same numbers. |
