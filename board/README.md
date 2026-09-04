@@ -21,8 +21,8 @@ scan (Python)  ──enqueue pending──▶  decisions table  ◀──approve
 ```
 
 The board's SQL in [`lib/queries.ts`](lib/queries.ts) **mirrors** `everlink.queue.DbDecisionStore`
-exactly (same columns, same `WHERE status = 'pending'` scoping, same `ORDER BY decided_at`
-FIFO). The GET `/api/decisions` response `{ counts, decisions }` is the same shape the Python
+exactly (same columns, same `WHERE status = 'pending'` scoping; the board lists
+newest-first via `ORDER BY created_at DESC`, while the worker queue consumes FIFO). The GET `/api/decisions` response `{ counts, decisions }` is the same shape the Python
 CLI's `decisions --json` emits — the board and the CLI are interchangeable clients.
 
 ## Pages

@@ -79,7 +79,7 @@ export async function listDecisions(
       : await query<DecisionRow[]>(
           sql`SELECT id, affected_slot_ids, proposal, status, reject_reason, created_at, decided_at
               FROM decisions WHERE status = ${status}
-              ORDER BY created_at ASC LIMIT ${limit}`,
+              ORDER BY created_at DESC LIMIT ${limit}`,
         );
   return rows.map(rowToDecision);
 }
