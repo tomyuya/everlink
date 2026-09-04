@@ -33,8 +33,10 @@ secrets.*
 aws_credentials*
 credentials.json
 
-# --- exported production data snapshots (local-only; see .gitignore) ---
+# --- data snapshots: slots_*.csv ARE shipped (first-party Scanner read-only input,
+# baked into this PRIVATE image); raw *.jsonl dumps stay out. ---
 data/*.csv
+!data/slots_*.csv
 data/*.jsonl
 
 # --- python bytecode / packaging ---

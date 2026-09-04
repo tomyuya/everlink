@@ -8,8 +8,13 @@ secrets.*
 aws_credentials*
 credentials.json
 
-# --- exported data snapshots (contain production content; keep local only) ---
+# --- exported data snapshots ---
+# slots_*.csv = the first-party Scanner's READ-ONLY Phase-A input. No secrets/PII
+# (just public url/anchor/slot_type/protected flags); the production nightly cron
+# bakes them into the PRIVATE image (Dockerfile COPYs data/), so they ARE committed.
+# Raw *.jsonl dumps stay local-only.
 data/*.csv
+!data/slots_*.csv
 data/*.jsonl
 !data/slots_summary.json
 !data/.gitkeep

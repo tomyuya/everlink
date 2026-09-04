@@ -31,19 +31,20 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy only what the agent runs. `ensure_schema` reads /app/schema.sql at connect time, so
-# the DDL must ship with the image. board/ (Next.js -> Vercel), tests/, and local data
-# snapshots are excluded via .dockerignore.
+# the DDL must ship with the image. board/ (Next.js -> Vercel), tests/, and raw *.jsonl
+# dumps are excluded via .dockerignore.
 #
-# DATA CONTRACT (honest): this image is PURE CODE — it bakes NO production content. The
-# three first-party adapters read data/slots_<site>.csv (the Phase-A read-only export that
-# carries the protected/disclosure flags), which is gitignored, so a repo-based build has
-# none and a first-party scan finds 0 slots. To run the first-party nightly cron, mount the
-# CSVs at /app/data (a Railway volume, or build+push a PRIVATE image with them present);
-# see DEPLOYMENT.md. The read-only `generic` adapter needs NO data — `scan --site <sitemap
-# or URL>` crawls live — so the image works out-of-the-box for the any-site demo shot.
+# DATA CONTRACT (honest): the three first-party adapters read data/slots_<site>.csv (the
+# Phase-A read-only export carrying the protected/disclosure flags). Those slots_*.csv ARE
+# baked into this PRIVATE image -- they hold NO secrets/PII, only public url/anchor/
+# slot_type/protected flags -- so the first-party nightly cron finds its slots out-of-the-box
+# (a public fork without data/ still degrades gracefully to 0 slots, never an error). The
+# read-only `generic` adapter needs NO data -- `scan --site <sitemap or URL>` crawls live --
+# so the any-site demo shot works regardless.
 COPY schema.sql ./
 COPY everlink/ ./everlink/
 COPY scripts/ ./scripts/
+COPY data/ ./data/
 
 # Least privilege: run as a non-root user. The container only reads its own code and opens
 # outbound HTTPS to Bedrock / Neon / Resend / Telegram — it never listens (cron model).
