@@ -43,7 +43,7 @@ const STAGES: Stage[] = [
     icon: <Inbox className="h-4 w-4" />,
     title: "You decide",
     desc: "Only fixes risky enough to need a human land here as cards. Approve or reject.",
-    href: "/",
+    href: "/inbox",
     hrefLabel: "Inbox",
     highlight: true,
   },

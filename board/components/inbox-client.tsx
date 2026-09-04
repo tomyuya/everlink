@@ -82,7 +82,7 @@ export function InboxClient({
         {FILTERS.map(({ key, label }) => {
           const active = key === status;
           const n = key === "all" ? sum(counts) : (counts[key] ?? 0);
-          const href = key === "pending" ? "/" : `/?status=${key}`;
+          const href = key === "pending" ? "/inbox" : `/inbox?status=${key}`;
           return (
             <Link
               key={key}
@@ -157,7 +157,7 @@ export function InboxClient({
       {decisions.length === 0 ? (
         <EmptyState
           title={`No ${status === "all" ? "" : status} decisions`}
-          hint="An empty inbox is the goal — EverLink only surfaces a card when a fix genuinely needs a human. See the pipeline and Automation panel above for what runs behind the scenes."
+          hint="An empty inbox is the goal — EverLink only surfaces a card when a fix genuinely needs a human. See the pipeline and Automation panel on the home page for what runs behind the scenes."
           icon={<InboxIcon className="h-8 w-8" />}
         />
       ) : (

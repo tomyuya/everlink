@@ -4,49 +4,38 @@ import Link from "next/link";
 import { HeartPulse, Inbox as InboxIcon, ListChecks, Timer } from "lucide-react";
 
 import { AutomationPanel } from "@/components/automation-panel";
-import { EmptyState } from "@/components/empty-state";
-import { InboxClient } from "@/components/inbox-client";
 import { Pipeline } from "@/components/pipeline";
-import { isReadonly } from "@/lib/db";
-import { listAudit, listDecisions, statusCounts, weeklyStats } from "@/lib/queries";
+import { listAudit, statusCounts, weeklyStats } from "@/lib/queries";
 import { relativeTime } from "@/lib/utils";
-import type { Decision, DecisionStatus, StatusCounts, WeeklyStats } from "@/lib/types";
+import type { StatusCounts, WeeklyStats } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Inbox · EverLink Board",
+  title: "EverLink · the autonomous link-rot steward",
 };
 
-const VALID = new Set(["pending", "approved", "applied", "rejected", "expired", "all"]);
-
-export default async function InboxPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ status?: string }>;
-}) {
-  const sp = await searchParams;
-  const raw = sp.status ?? "pending";
-  const status = (VALID.has(raw) ? raw : "pending") as DecisionStatus | "all";
-
-  let decisions: Decision[] = [];
+/**
+ * The product home page: what EverLink is, proof the loop is running, the whole
+ * autonomous pipeline at a glance, and the nightly entrypoint. The working queue
+ * lives on /inbox so this page stays a clean "understand in one glance" surface.
+ */
+export default async function HomePage() {
   let counts: StatusCounts = {};
   let stats: WeeklyStats | null = null;
   let lastActivity = "";
   let dbError: string | null = null;
   try {
-    const [d, c, s, audit] = await Promise.all([
-      listDecisions(status, 200),
+    const [c, s, audit] = await Promise.all([
       statusCounts(),
       weeklyStats(30),
       listAudit(1),
     ]);
-    decisions = d;
     counts = c;
     stats = s;
     lastActivity = relativeTime(audit[0]?.ts);
   } catch (e) {
-    dbError = e instanceof Error ? e.message : "Failed to load decisions";
+    dbError = e instanceof Error ? e.message : "Failed to load pipeline health";
   }
 
   return (
@@ -65,33 +54,6 @@ export default async function InboxPage({
       <Pipeline />
 
       <AutomationPanel lastActivity={lastActivity} />
-
-      <div id="inbox" className="space-y-5 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-            Decision inbox
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            The one place EverLink stops for a human. Approve, reject, or batch the
-            low-risk fixes it surfaced above.
-          </p>
-        </div>
-
-        {dbError ? (
-          <EmptyState
-            title="Database unavailable"
-            hint={dbError}
-            icon={<InboxIcon className="h-8 w-8" />}
-          />
-        ) : (
-          <InboxClient
-            decisions={decisions}
-            counts={counts}
-            status={status}
-            readonly={isReadonly()}
-          />
-        )}
-      </div>
     </div>
   );
 }
@@ -126,13 +88,13 @@ function Hero() {
           <span className="font-medium text-zinc-900 dark:text-zinc-100">
             repairs it itself
           </span>
-          . It only stops here — at this board — when a fix is risky enough to need a
+          . It only stops at the decision inbox when a fix is risky enough to need a
           human judgment. Everything else heals on its own, on a schedule, and leaves an
           audit trail.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
           <Link
-            href="#inbox"
+            href="/inbox"
             className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
           >
             Review decisions
