@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { DecisionWithEvidence, LinkSlot, SlotCheck } from "@/lib/types";
-import { VERDICT_META, cn, formatDateTime } from "@/lib/utils";
+import { VERDICT_META, cn, formatDateTime, siteLabel } from "@/lib/utils";
 
 /**
  * The detection evidence behind a card: for every affected link slot, the L1 HTTP
@@ -34,7 +34,7 @@ function SlotEvidence({ slot, check }: { slot: LinkSlot; check?: SlotCheck }) {
     <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-          {slot.site}
+          {siteLabel(slot.site)}
         </span>
         <span className="text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
           {slot.slot_type}

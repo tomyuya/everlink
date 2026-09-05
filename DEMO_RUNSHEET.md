@@ -17,7 +17,7 @@
 
 ## Shot 1 · 0:00–0:30 · 冷开场：真问题
 
-画面：字卡 `#stats`（file:///d:/qcoder/_demo_cards.html#stats）→ **www.aethelgem.com**（实测 1.5–3s 载完）→ **hotdeals.today**（导航工具会报超时但页面 ~12s 渲染成功，留足 15s）。~~sandcart.com~~ 是停放页、~~flashdeals.today~~ 超时，**均禁止访问**；"三站"叙事由 board 的站点徽章与 scan 报告补足。
+画面：字卡 `#stats`（file:///d:/qcoder/_demo_cards.html#stats）→ **www.aethelgem.com**（实测 1.5–3s 载完）→ **hotdeals.today**（导航工具会报超时但页面 ~12s 渲染成功，留足 15s）。第三站 **flashdeals.today**（内部代号 sandcart，即 FlashDeals dropshipping 独立站；首页实测 HTTP 200 可达）为保持节奏不做实时导航，"三站"叙事由 board 的站点徽章与 scan 报告补足。**注意：不存在 sandcart.com 这个域名**（旧稿误写，已废弃）。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -145,7 +145,7 @@ S6  applied卡 https://everlink-seven.vercel.app/decision/dec-b21f3d82bc
 S6  report   https://everlink-seven.vercel.app/report         (Links healed 37)
 字卡        file:///d:/qcoder/_demo_cards.html#stats · #cards · #end
 外站        https://www.aethelgem.com (1.5-3s) · https://hotdeals.today (~12s，nav 报超时属正常)
-禁访        sandcart.com（停放页）· flashdeals.today（超时）
+第三站      flashdeals.today（内部代号 sandcart = FlashDeals 独立站，HTTP 200 可达，演示不做实时导航）· 无 sandcart.com 域名
 ```
 
 ## 演练记录（2026-09-04，全链路 verified）

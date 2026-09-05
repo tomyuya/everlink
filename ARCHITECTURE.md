@@ -55,6 +55,11 @@ The three source databases are opened **read-only** (`SET default_transaction_re
 on`); the only write path is the gated Writer against AethelGem block content, and the
 production Blue-Neon instance is on a hard deny-list (see §6).
 
+The three source sites (`aethelgem` / `hotdeals` / `sandcart`) are the maintainer's
+dogfooding EXAMPLE keys — `sandcart` is the internal codename for the FlashDeals
+storefront. A deployer substitutes their own site keys, databases and origins; no site
+identity or domain is hardcoded in the agent.
+
 ---
 
 ## 2. The nightly pipeline (end to end)

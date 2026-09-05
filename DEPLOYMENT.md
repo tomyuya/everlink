@@ -170,6 +170,16 @@ none and a first-party `scan` finds 0 slots. Choose one:
 The **live demo inbox does not depend on the container scanning**: it runs off the seed dataset
 injected into Neon (see `scripts/` seed tooling, Phase F), so judges always see a populated board.
 
+### Public origin per site (`<SITE>_PUBLIC_ORIGIN`)
+
+If a source database stores internal links as bare relative paths (e.g. FlashDeals'
+`/products/...`), set that site's public origin so the adapter can absolutize them at
+ingestion — otherwise the probe-side SSRF guard rejects a scheme-less URL and the whole
+site surfaces as false `needs_human_recheck` cards. Symmetric with `<SITE>_DATABASE_URL`
+(e.g. `SANDCART_PUBLIC_ORIGIN=https://your-store.example.com`). Sites whose links are
+already absolute need no origin. Nothing is hardcoded: an unset origin leaves relative
+URLs untouched rather than guessing a domain.
+
 ---
 
 ## AWS Bedrock AgentCore (the stretch — §9 熔断)
@@ -219,6 +229,7 @@ scan → notify → worker chain against the live DB.
 | `NEXT_PUBLIC_BOARD_READONLY` | board | `1` = public read-only demo view |
 | `AWS_REGION`, `BEDROCK_MODEL_ID`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | agent | Bedrock LLM (Judge/Writer) |
 | `AETHELGEM_/SANDCART_/HOTDEALS_DATABASE_URL` | export only | read-only source DBs (Phase-A CSV export) |
+| `<SITE>_PUBLIC_ORIGIN` | agent (scan) | Public origin for absolutizing a site's relative internal links; symmetric with `<SITE>_DATABASE_URL`; unset = leave relative URLs as-is |
 | `RESEND_API_KEY`, `RESEND_FROM`, `EVERLINK_NOTIFY_EMAIL` | agent | email push (all three required to activate) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | agent | optional Telegram push |
 | `EVERLINK_BOARD_URL` | agent | board link embedded in every notification |

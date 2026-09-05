@@ -41,6 +41,26 @@ export const ACTION_LABEL: Record<Action, string> = {
   ESCALATE_HUMAN: "Escalate to human",
 };
 
+/**
+ * Public-facing brand name for each first-party site key. The store keeps an
+ * internal codename; the board is a human-facing surface, so it shows the real
+ * product name instead of leaking the codename. "sandcart" is the internal
+ * codename for the FlashDeals dropshipping storefront (flashdeals.today) — an
+ * independent store, not an Amazon affiliate. Unknown keys fall back to the raw
+ * value so a new site is never rendered as a blank badge.
+ */
+export const SITE_LABEL: Record<string, string> = {
+  aethelgem: "AethelGem",
+  sandcart: "FlashDeals",
+  hotdeals: "HotDeals",
+};
+
+/** Human-facing label for a site key (falls back to the raw key when unmapped). */
+export function siteLabel(site?: string | null): string {
+  if (!site) return "";
+  return SITE_LABEL[site] ?? site;
+}
+
 export const VERDICT_META: Record<Verdict, { label: string; className: string }> = {
   healthy: { label: "Healthy", className: "text-emerald-600 dark:text-emerald-400" },
   dead: { label: "Dead", className: "text-rose-600 dark:text-rose-400" },

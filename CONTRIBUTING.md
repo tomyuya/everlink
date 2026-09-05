@@ -52,6 +52,10 @@ explicitly in the PR description instead of letting it fail silently.
    docs, and tests use placeholders or monkeypatched fake DSNs.
 5. **The board never fabricates.** It renders exactly what is in the decision queue; empty
    states are correct behaviour for an empty database.
+6. **No hardcoded origins or domains.** A site's public origin comes only from the
+   deployer's `<SITE>_PUBLIC_ORIGIN` env var (see `adapters.resolve_origin`). Never bake
+   a domain into the repo — this is an open-source, self-hosted project, so the code must
+   work for any deployer's site, not just the maintainer's.
 
 ## Commit & PR style
 

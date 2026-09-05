@@ -243,13 +243,19 @@ def _hotdeals_scenario() -> _Scen:
 
 def _sandcart_scenario() -> _Scen:
     """A price-drift (offer_changed) product slot on sandcart (safety curtain 3:
-    EditorialPolicy must downgrade the stale price claim) — the human rejected it."""
-    asin = "B0SCDESK01"
-    url = f"https://www.amazon.com/dp/{asin}?tag=sandcart-20"
+    EditorialPolicy must downgrade the stale price claim) — the human rejected it.
+
+    sandcart is the internal codename for FlashDeals (flashdeals.today), an
+    INDEPENDENT dropshipping storefront — NOT an Amazon affiliate site. Its product
+    links are internal `/products/<slug>` pages on its own domain, so this replay
+    scenario uses a flashdeals.today internal link (never an amazon.com/dp?tag= URL,
+    which would misrepresent the store as an Amazon associate).
+    """
+    url = "https://flashdeals.today/products/flexispot-e7-electric-standing-desk-home-office-1005001234567890"
     return _Scen(
         site="sandcart", article_id="demo-sc-001",
         article_title="Home Office Setup: Our Favorite Standing Desks", block_id="b-price",
-        block_type="product_card", slot_type="component", role="core_recommendation",
+        block_type="product_card", slot_type="internal", role="core_recommendation",
         anchor_text="FlexiSpot E7 standing desk", url=url, target_url=url,
         surrounding_sentence="The FlexiSpot E7 is a rock-solid standing desk under $200.",
         regions='["us","ca"]', protected=0, verdict="offer_changed",

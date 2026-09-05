@@ -1,19 +1,74 @@
 # EverLink
 
-**Keeps every link on your content sites alive, current, and honest — while you sleep.**
+**An open-source (MIT), self-hosted link-rot patrol agent.** You clone the code, deploy
+it on your own infrastructure, and fill in your own config — then it patrols the outbound
+links of **your own site** every night: fixing what it can autonomously, and surfacing a
+compact decision card **only when a human judgment is actually needed**.
 
-EverLink is an autonomous background agent that patrols the outbound links of a
-content/affiliate site, detects link rot (dead products, ended affiliate programs,
-price/availability drift, stale references), *decides how to fix each one*, and
-surfaces a compact decision card **only when a human judgment is actually needed**.
-It is not another broken-link *reporter* — it is a link *steward*.
+> Built for the **AWS "Agents for Humans" Hackathon** (Professional Agents track) with
+> the **Strands Agents SDK** and **Amazon Bedrock**.
 
-> Built for the **AWS "Agents for Humans" Hackathon** (Professional Agents track)
-> with the **Strands Agents SDK** and **Amazon Bedrock**.
+**It is not a SaaS.** No sign-up, no hosting, no monthly fee, no multi-tenancy — just code
+you run on your own server. The three sites that appear in this repo (**AethelGem /
+HotDeals / FlashDeals**) are only the **maintainer's dogfooding examples** (the first user
+is the author). When you deploy, you swap in your own site keys, databases, and domains.
 
-**Docs:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (diagrams) · [`EVALS_REPORT.md`](EVALS_REPORT.md)
-(eval evidence) · [`DEPLOYMENT.md`](DEPLOYMENT.md) (runbook) · [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md)
-(phase gate) · [`CONTRIBUTING.md`](CONTRIBUTING.md) (dev workflow & house rules).
+<details>
+<summary><b>What it does, in 30 seconds</b></summary>
+
+EverLink patrols the outbound links of a content/affiliate site, detects link rot (dead
+product pages, ended affiliate programs, price/availability drift, stale references),
+*decides how to fix each one*, and surfaces a decision card **only when a human judgment
+is actually needed**. It is not another broken-link *reporter* — it is a link *steward*.
+
+</details>
+
+## Deploy it — what you provide (the deployer contract)
+
+EverLink is self-hosted, so at deploy time you provide what it cannot ship with. **Nothing
+is hardcoded in the repo — no domain, no database address, no secret**; you supply all of
+it through environment variables:
+
+| # | You provide | How to configure | Why it's needed |
+|---|-------------|------------------|-----------------|
+| 1 | Your site's database (**read-only**) | env `<SITE>_DATABASE_URL` | The data source — the links to patrol are read from here |
+| 2 | Your site's **public origin** | env `<SITE>_PUBLIC_ORIGIN` | Turns an internal relative link `/products/x` into an absolute URL before probing |
+| 3 | EverLink's own database | env `EVERLINK_DATABASE_URL` | Stores the patrol data (decision cards / audit trail / check records) |
+| 4 | An LLM | AWS Bedrock credentials | The reasoning brain for the Judge / Writer agents |
+| 5 | A timer | Railway cron `0 3 * * *` (or any schedule) | Triggers the nightly patrol |
+
+`<SITE>` is the key you give your own site (in the examples: `AETHELGEM` / `SANDCART` /
+`HOTDEALS`). Full step-by-step runbook: **[`DEPLOYMENT.md`](DEPLOYMENT.md)**; visual
+explainer: the board's **`/how-it-works`** page.
+
+## The two databases (the key to understanding EverLink)
+
+```
+   (1) YOUR SITE'S DB   ·   <SITE>_DATABASE_URL   ·   READ-ONLY source
+       ├─ your products / articles / links
+       ├─ EverLink NEVER writes here
+       └─ guard: db._assert_writable   (SET default_transaction_read_only=on)
+
+                        │  read-only SELECT
+                        ▼
+
+   (2) EVERLINK'S OWN DB   ·   EVERLINK_DATABASE_URL   ·   the ONLY place it writes
+       ├─ link_slots     a mirror of the links it patrols
+       ├─ slot_checks    each probe's result
+       ├─ decisions      the cards awaiting your approval
+       └─ audit_log      every step, audited
+```
+
+- **(1) Source DB** — your own e-commerce / content site's database. EverLink connects
+  **strictly read-only** (`SET default_transaction_read_only=on`) and reads the links to
+  patrol from it. **It never writes to your source DB** — the write guard
+  (`db._assert_writable`) rejects any write aimed at a source-DB host.
+- **(2) EverLink DB** — the agent's own operational database: the link mirror, probe
+  results, decision cards, and audit trail. This is the only place EverLink writes.
+
+**Docs:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (diagrams) · [`DEPLOYMENT.md`](DEPLOYMENT.md) (runbook) ·
+[`EVALS_REPORT.md`](EVALS_REPORT.md) (eval evidence) · [`CONTRIBUTING.md`](CONTRIBUTING.md) (dev workflow & house rules) ·
+[`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md) (phase gate).
 
 ---
 
@@ -278,13 +333,14 @@ across the three production sites:
 |---|---|---|
 | **AethelGem** (Django block content) | 15,795 | component 15,772 · reference 19 · commercial 4 |
 | **hotdeals** (products[] jsonb → amazon) | 7,605 | component 7,602 · reference 2 · commercial 1 |
-| **sandcart** (section product links) | 76 | internal 76 |
+| **sandcart** = FlashDeals (flashdeals.today; dropshipping storefront, section product links) | 76 | internal 76 |
 | **Total** | **23,476** | component 23,374 · reference 21 · commercial 5 · internal 76 |
 
 Notes on the snapshot:
 
 - `component` slots are product links rendered from a structured source (AethelGem `product_card`/`product_grid` blocks; hotdeals `products[]` asin → region-aware `amazon.{tld}/dp/{asin}`). These are the highest-value link-rot targets.
 - hotdeals' link assets live in `products[]` jsonb, **not** in the article HTML — the content is plain prose with only 3 inline `<a>` links across 1,025 articles.
+- `internal` slots (sandcart = **FlashDeals**, an independent dropshipping storefront) are stored in the source DB as relative `/products/...` paths. The adapter absolutizes them against the site's **configured public origin** (`<SITE>_PUBLIC_ORIGIN` env var — the deployer sets their own; nothing is hardcoded in the repo) so probes hit the real storefront instead of failing the SSRF scheme check. FlashDeals' links are internal product pages, **not** Amazon affiliate URLs (only AethelGem and hotdeals carry amazon.{tld}/dp links). `sandcart` is the maintainer's internal example site key — substitute your own when you deploy.
 - `protected=0` everywhere is expected: affiliate-disclosure text lives in **site-level fixed components**, which are structurally outside the article-block pool (see `DisclosurePolicy` layer (a)). The disclosure guard still fires on any block that *does* carry disclosure keywords.
 - CSVs are gitignored (production content); only `data/slots_summary.json` is committed.
 
