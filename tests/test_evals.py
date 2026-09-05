@@ -104,6 +104,35 @@ def test_scope_allows_commercial_replace_url():
     assert policy.scope_violation(_slot(slot_type="commercial"), _prop("REPLACE_URL")) is None
 
 
+# --- policy oracle: inconclusive-verdict guard (false-positive control) -----
+def test_verification_violation_flags_rewrite_on_inconclusive():
+    # needs_human_recheck == the PROBE was refused/uncertain, NOT the user's link
+    # is broken; acting on it (anything but ESCALATE_HUMAN) is a false positive.
+    assert policy.verification_violation("needs_human_recheck", _prop("REWRITE_SENTENCE")) is not None
+
+
+def test_verification_violation_allows_escalate_on_inconclusive():
+    assert policy.verification_violation("needs_human_recheck", _prop("ESCALATE_HUMAN")) is None
+
+
+def test_verification_violation_inert_on_conclusive_verdict():
+    assert policy.verification_violation("dead", _prop("REPLACE_URL")) is None
+
+
+def test_verification_violation_inert_without_verdict():
+    assert policy.verification_violation(None, _prop("REPLACE_URL")) is None
+
+
+def test_proposal_violations_threads_verdict():
+    # a conclusive-dead verdict adds no verification violation
+    assert policy.proposal_violations(_slot(), _prop("REPLACE_URL", new_url="https://a/x"),
+                                      verdict="dead") == []
+    # an inconclusive verdict does
+    v = policy.proposal_violations(_slot(), _prop("REPLACE_URL", new_url="https://a/x"),
+                                   verdict="needs_human_recheck")
+    assert len(v) == 1 and "verification" in v[0]
+
+
 def test_proposal_violations_aggregates():
     # a protected reference slot that gets REPLACE_URL violates BOTH rules
     v = policy.proposal_violations(_slot(protected=1, slot_type="reference"), _prop("REPLACE_URL"))

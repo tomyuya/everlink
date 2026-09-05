@@ -56,9 +56,15 @@ function SlotEvidence({ slot, check }: { slot: LinkSlot; check?: SlotCheck }) {
           </Row>
         ) : null}
         <Row label="URL">
-          <span className="break-all font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+          <a
+            href={slot.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all font-mono text-[11px] text-sky-700 underline decoration-sky-300 underline-offset-2 hover:decoration-sky-500 dark:text-sky-400 dark:decoration-sky-700"
+            title="Open in your browser — you are the final check"
+          >
             {slot.url}
-          </span>
+          </a>
         </Row>
         {slot.surrounding_sentence ? (
           <Row label="Context">

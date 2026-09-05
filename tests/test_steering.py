@@ -40,12 +40,14 @@ def _slot(**kw) -> LinkSlot:
 
 
 def _before(tool_name: str, tool_input: dict, slot: LinkSlot | None = None,
-            claimed_price: str | None = None) -> BeforeToolCallEvent:
+            claimed_price: str | None = None, verdict: str | None = None) -> BeforeToolCallEvent:
     state: dict = {}
     if slot is not None:
         state["slot"] = slot.model_dump()
     if claimed_price is not None:
         state["claimed_price"] = claimed_price
+    if verdict is not None:
+        state["verdict"] = verdict
     return BeforeToolCallEvent(
         agent=_FakeAgent(), selected_tool=None,
         tool_use={"toolUseId": "tu-1", "name": tool_name, "input": tool_input},
@@ -177,6 +179,49 @@ def test_editorial_allows_rewrite_that_drops_stale_price():
 
 
 # --------------------------------------------------------------------------- #
+# recheck_policy — false-positive guard (inconclusive verdict => ESCALATE only)
+# --------------------------------------------------------------------------- #
+def test_recheck_cancels_rewrite_on_inconclusive_verdict():
+    # The probe was blocked/uncertain, so user accessibility is UNKNOWN. Rewriting
+    # content on top of a probe limitation is the false positive this kills.
+    name, inp = _proposal_call("REWRITE_SENTENCE", new_sentence="Link is unreachable.")
+    ev = _before(name, inp, slot=_slot(), verdict="needs_human_recheck")
+    steering.recheck_policy(ev)
+    assert ev.cancel_tool and "recheck_policy" in ev.cancel_tool
+
+
+def test_recheck_cancels_replace_url_on_inconclusive_verdict():
+    name, inp = _proposal_call("REPLACE_URL", new_url="https://a.com/alt")
+    ev = _before(name, inp, slot=_slot(), verdict="needs_human_recheck")
+    steering.recheck_policy(ev)
+    assert ev.cancel_tool
+
+
+def test_recheck_allows_escalate_human_on_inconclusive_verdict():
+    name, inp = _proposal_call("ESCALATE_HUMAN")
+    ev = _before(name, inp, slot=_slot(), verdict="needs_human_recheck")
+    steering.recheck_policy(ev)
+    assert ev.cancel_tool is False
+
+
+def test_recheck_inert_on_conclusive_verdict():
+    # A proven-dead link may still be rewritten/replaced; the guard only fires
+    # on an inconclusive probe.
+    name, inp = _proposal_call("REPLACE_URL", new_url="https://a.com/alt")
+    ev = _before(name, inp, slot=_slot(), verdict="dead")
+    steering.recheck_policy(ev)
+    assert ev.cancel_tool is False
+
+
+def test_recheck_inert_without_verdict_context():
+    name, inp = _proposal_call("REWRITE_SENTENCE", new_sentence="x")
+    ev = _before(name, inp, slot=_slot())          # no verdict threaded
+    steering.recheck_policy(ev)
+    assert ev.cancel_tool is False
+
+
+
+# --------------------------------------------------------------------------- #
 # write_gate (spec §4.3-4)
 # --------------------------------------------------------------------------- #
 def test_write_gate_cancels_apply_fix_without_decision_id():
@@ -250,7 +295,8 @@ def test_audit_never_raises_on_sink_error():
 def test_judge_hooks_assembly_matches_spec():
     hooks = steering.judge_hooks()
     assert steering.scope_policy in hooks and steering.editorial_policy in hooks
-    assert len(hooks) == 3                                   # scope, editorial, audit
+    assert steering.recheck_policy in hooks                  # false-positive guard
+    assert len(hooks) == 4                          # scope, editorial, recheck, audit
 
 
 def test_scanner_hooks_assembly_matches_spec():
@@ -298,6 +344,37 @@ def test_enforcement_steers_a_violating_judge_to_comply():
     proposal = agents.judge_slot(judge, slot, check)
 
     assert proposal.action == "ESCALATE_HUMAN"              # final proposal is compliant
+    assert calls["n"] >= 2                                  # the model had to re-decide
+    assert "steering_cancel" in col.events()                # the block was audited
+
+
+def test_botwall_false_positive_is_steered_to_escalate():
+    """End-to-end regression for the reported incident: an Amazon probe hit a
+    bot-wall (final_verdict=needs_human_recheck), and the Judge tried to
+    REWRITE_SENTENCE claiming the link is 'inaccessible to users'. Real users
+    open it fine — recheck_policy must steer that to ESCALATE_HUMAN."""
+    calls = {"n": 0}
+
+    def botwall_judge(messages):
+        calls["n"] += 1
+        blob = json.dumps(messages, default=str).lower()
+        if "cancelled by everlink steering" in blob:        # saw the guidance -> comply
+            return {"action": "ESCALATE_HUMAN",
+                    "rationale": "automated probe was inconclusive; human click-through required",
+                    "risk_level": "high"}
+        return {"action": "REWRITE_SENTENCE",
+                "new_sentence": "The link is blocked by Amazon's bot-wall, inaccessible to users.",
+                "rationale": "bot-wall", "risk_level": "high"}
+
+    col = steering.AuditCollector()
+    judge = agents.build_judge(StubModel(structured=botwall_judge), audit_sink=col, enforce=True)
+    slot = _slot(id="amz-1", slot_type="commercial", url="https://www.amazon.com/dp/B0F21KVBHN")
+    check = CheckResult(slot_id=slot.id, final_verdict="needs_human_recheck",
+                        l2_verdict="blocked", l2_evidence="bot-wall / captcha signal")
+    proposal = agents.judge_slot(judge, slot, check)
+
+    assert proposal.action == "ESCALATE_HUMAN"              # never a blind rewrite
+    assert "inaccessible to users" not in (proposal.new_sentence or "").lower()
     assert calls["n"] >= 2                                  # the model had to re-decide
     assert "steering_cancel" in col.events()                # the block was audited
 

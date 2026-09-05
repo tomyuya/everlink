@@ -166,6 +166,28 @@ def editorial_policy(event: BeforeToolCallEvent) -> None:
                f"no rule-preserving rewrite exists.")
 
 
+def recheck_policy(event: BeforeToolCallEvent) -> None:
+    """False-positive guard: an INCONCLUSIVE verdict may only ESCALATE_HUMAN.
+
+    ``needs_human_recheck`` means the probe itself was blocked / rate-limited /
+    timed out — the link's health for REAL users is unknown (humans in browsers
+    typically open such links fine). Letting the Judge rewrite or drop content on
+    top of a probe limitation is exactly the false positive this policy exists to
+    kill. The verdict is threaded by the orchestrator via
+    ``invocation_state["verdict"]``; without it the hook is inert.
+    """
+    proposal = proposal_from_event(event)
+    if proposal is None:
+        return
+    verdict = (event.invocation_state or {}).get("verdict")
+    violation = policy.verification_violation(verdict, proposal)
+    if violation:
+        guide(event, "recheck_policy",
+               f"{violation} Re-decide with action=ESCALATE_HUMAN and a rationale that "
+               f"says the automated probe was inconclusive and a human click-through is "
+               f"required. Never claim the link is inaccessible to users.")
+
+
 # --------------------------------------------------------------------------- #
 # write_gate (spec §4.3-4) — needs an approval lookup, so it is a factory
 # --------------------------------------------------------------------------- #
@@ -270,8 +292,10 @@ def judge_hooks(audit_sink: Optional[Callable[[dict], None]] = None,
     NOTE: disclosure is enforced at WRITE time (writer_hooks) and SCORED at judge
     time by the Evals oracle — the judge is additionally steered by its system
     prompt (rule 1). This split is deliberate (defense in depth + human approval).
+    ``recheck_policy`` is the false-positive guard: an inconclusive verdict
+    (probe blocked / timed out) may only ever ESCALATE_HUMAN.
     """
-    return [scope_policy, editorial_policy,
+    return [scope_policy, editorial_policy, recheck_policy,
             make_audit(audit_sink or AuditCollector(), agent_name=agent_name)]
 
 

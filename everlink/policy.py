@@ -87,11 +87,35 @@ def scope_violation(slot: LinkSlot, proposal: Proposal) -> Optional[str]:
     return None
 
 
-def proposal_violations(slot: LinkSlot, proposal: Proposal) -> list[str]:
+# Verdicts that mean "the PROBE was refused / inconclusive" — NOT "the link is bad".
+INCONCLUSIVE_VERDICTS = ("needs_human_recheck",)
+
+
+def verification_violation(verdict: Optional[str], proposal: Proposal) -> Optional[str]:
+    """Hard rule 3: an inconclusive verdict may only ESCALATE_HUMAN.
+
+    ``needs_human_recheck`` means the automated probe was blocked, rate-limited or
+    timed out — user accessibility is UNKNOWN (a human browser on a residential IP
+    usually opens such links fine). Proposing a content mutation on top of an
+    inconclusive measurement turns a probe limitation into a false positive that
+    rewrites live content for no reason.
+    """
+    if verdict in INCONCLUSIVE_VERDICTS and proposal.action != "ESCALATE_HUMAN":
+        return (f"verification: verdict '{verdict}' means the PROBE was refused or was "
+                f"inconclusive — user accessibility is unknown, so {proposal.action} is "
+                f"forbidden (must ESCALATE_HUMAN for a human click-through)")
+    return None
+
+
+def proposal_violations(slot: LinkSlot, proposal: Proposal,
+                        verdict: Optional[str] = None) -> list[str]:
     """All steering violations for one (slot, proposal) pair — empty means clean."""
     out: list[str] = []
     for check in (disclosure_violation, scope_violation):
         v = check(slot, proposal)
         if v:
             out.append(v)
+    v = verification_violation(verdict, proposal)
+    if v:
+        out.append(v)
     return out

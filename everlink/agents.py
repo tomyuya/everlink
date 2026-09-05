@@ -142,6 +142,15 @@ JUDGE_SYSTEM_PROMPT = (
     "4. Honesty: NEVER fabricate a URL. Use find_alternatives for SEARCH entrypoints; a "
     "specific replacement deep link is acceptable only if it can be verified. If you "
     "cannot verify a fix, ESCALATE_HUMAN — that is a correct outcome, not a failure.\n"
+    "5. Measurement limits: final_verdict=needs_human_recheck (or evidence mentioning a "
+    "bot-wall / captcha / timeout) means YOUR PROBE was refused — it is NOT evidence that "
+    "users cannot open the link (a human browser usually opens it fine). The ONLY allowed "
+    "action then is ESCALATE_HUMAN, with a rationale saying the automated probe was "
+    "inconclusive and a human click-through is required. Never write 'inaccessible to "
+    "users' from a probe-side block.\n"
+    "6. Evidence discipline: your rationale may cite ONLY the evidence lines provided "
+    "above. Never introduce a cause (bot-wall, captcha, program end) that is not present "
+    "in the evidence — a rationale that contradicts its own evidence chain is a defect.\n"
     "risk_level: low (anchor/cosmetic), medium (re-link to a verified equivalent), "
     "high (sentence rewrite, drop, or anything touching disclosure/commercial intent)."
 )
@@ -321,6 +330,12 @@ def _judge_prompt(slot: LinkSlot, check: CheckResult) -> str:
         f"- final_verdict: {check.final_verdict}\n"
         f"- L1 HTTP {check.l1_status}; redirect chain: {chain}\n"
         f"- L2: {check.l2_verdict}; evidence: {check.l2_evidence}\n"
+        + (
+            "NOTE: needs_human_recheck means the PROBE was blocked/inconclusive, NOT that "
+            "users cannot open the link. Only ESCALATE_HUMAN is acceptable; say a human "
+            "click-through is required.\n"
+            if check.final_verdict == "needs_human_recheck" else ""
+        )
     )
 
 
@@ -334,7 +349,8 @@ def judge_slot(judge: Agent, slot: LinkSlot, check: CheckResult) -> Proposal:
     claimed_price = detect.claimed_price_from_text(slot.surrounding_sentence or "")
     result = judge(
         _judge_prompt(slot, check),
-        invocation_state={"slot": slot.model_dump(), "claimed_price": claimed_price},
+        invocation_state={"slot": slot.model_dump(), "claimed_price": claimed_price,
+                          "verdict": check.final_verdict},
     )
     so = getattr(result, "structured_output", None)
     if isinstance(so, Proposal):

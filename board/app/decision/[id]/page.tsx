@@ -8,6 +8,7 @@ import { DecisionActions } from "@/components/decision-actions";
 import { EvidenceChain } from "@/components/evidence-chain";
 import { RiskBadge } from "@/components/risk-badge";
 import { StatusPill } from "@/components/status-pill";
+import { VerifyBanner } from "@/components/verify-banner";
 import { EmptyState } from "@/components/empty-state";
 import { isReadonly } from "@/lib/db";
 import { getDecisionWithEvidence } from "@/lib/queries";
@@ -49,7 +50,7 @@ export default async function DecisionPage({
 
   if (!data) notFound();
 
-  const { decision, slots } = data;
+  const { decision, slots, checks } = data;
   const { proposal } = decision;
 
   return (
@@ -71,6 +72,10 @@ export default async function DecisionPage({
             {proposal.rationale}
           </p>
         ) : null}
+
+        <div className="mt-4">
+          <VerifyBanner slots={slots} checks={checks} />
+        </div>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-2">
           {proposal.new_url ? (

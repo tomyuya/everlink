@@ -128,6 +128,11 @@ def classify_l1(status: int | None, chain: list[RedirectHop], original_url: str,
     return "needs_human_recheck", f"HTTP {status}"
 
 
+def _is_transient(e: httpx.HTTPError) -> bool:
+    """Transport blips worth ONE polite retry (a timeout is not a dead link)."""
+    return isinstance(e, (httpx.TimeoutException, httpx.ConnectError))
+
+
 def probe_url(url: str, slot_id: str = "", *, timeout: float = 15.0,
               max_hops: int = 6, headers: dict | None = None,
               client: httpx.Client | None = None) -> CheckResult:
@@ -147,10 +152,18 @@ def probe_url(url: str, slot_id: str = "", *, timeout: float = 15.0,
             except SsrfBlocked as e:
                 error = f"ssrf_blocked: {e.reason}"
                 break
-            try:
-                resp = cli.get(current)
-            except httpx.HTTPError as e:
-                error = f"{type(e).__name__}: {e}"
+            resp = None
+            for attempt in (1, 2):
+                try:
+                    resp = cli.get(current)
+                    break
+                except httpx.HTTPError as e:
+                    error = f"{type(e).__name__}: {e}"
+                    if attempt == 1 and _is_transient(e):
+                        time.sleep(1.5)      # one polite retry; a blip is not rot
+                        continue
+                    break
+            if resp is None:
                 break
             status = resp.status_code
             chain.append(RedirectHop(url=current, status=status))

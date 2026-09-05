@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-import type { Action, DecisionStatus, RiskLevel, Verdict } from "./types";
+import type { Action, DecisionStatus, RiskLevel, SlotCheck, Verdict } from "./types";
 
 /** Tailwind-aware className merge (the user's stack convention). */
 export function cn(...inputs: ClassValue[]): string {
@@ -77,4 +77,30 @@ export function formatDateTime(iso?: string | null): string {
   if (Number.isNaN(d.getTime())) return "—";
   const [day, time] = d.toISOString().split(".")[0].split("T");
   return `${day} ${time} UTC`;
+}
+
+/**
+ * True when the automated probe could NOT conclusively verify a link — it was
+ * blocked (bot-wall / captcha), rate-limited, timed out, or otherwise returned
+ * `needs_human_recheck`. Such a verdict is a limit of a script probing from a
+ * datacenter IP, NOT proof the link is broken: a real person in a browser
+ * usually opens it fine. The board surfaces this so a human, not the probe, is
+ * the final arbiter (see components/verify-banner.tsx).
+ */
+export function isProbeInconclusive(check?: SlotCheck | null): boolean {
+  if (!check) return false;
+  if (check.final_verdict === "needs_human_recheck") return true;
+  if ((check.l2_verdict || "").toLowerCase() === "blocked") return true;
+  const ev = (check.l2_evidence || "").toLowerCase();
+  return (
+    ev.includes("bot-wall") ||
+    ev.includes("captcha") ||
+    ev.includes("probe-side block") ||
+    ev.includes("user accessibility unknown") ||
+    ev.includes("inconclusive") ||
+    ev.includes("fetch failed") ||
+    ev.includes("rate-limit") ||
+    ev.includes("timed out") ||
+    ev.includes("timeout")
+  );
 }

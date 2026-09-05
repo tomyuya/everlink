@@ -36,8 +36,11 @@ BLOCKED_PHRASES = [
 DEAD_PHRASES = [
     "page not found", "sorry! we couldn't find that page", "we can't find that page",
     "doesn't exist", "no longer exists", "has been removed", "item not found",
-    "product not found", "404", "this page is no longer available",
+    "product not found", "this page is no longer available",
 ]
+# NOTE: a bare "404" is deliberately NOT a phrase. As a substring it matches review
+# ids, model numbers and CSS classes on perfectly healthy pages; a genuine 404 is
+# caught by L1's HTTP status (and by probe_l2's status fallback) instead.
 UNAVAILABLE_PHRASES = [
     "currently unavailable", "temporarily out of stock", "out of stock",
     "no longer available", "this item is not available", "sold out",
@@ -76,6 +79,58 @@ def _first_match(needle_list: list[str], low: str) -> Optional[str]:
         if p in low:
             return p
     return None
+
+
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style|noscript|iframe)\b.*?</\1>", re.I | re.S)
+_TAG_RE = re.compile(r"<[^>]+>", re.S)
+_BODY_RE = re.compile(r"<body\b[^>]*>", re.I)
+_AVAIL_RE = re.compile(r"id=[\"']availability[\"']", re.I)
+_SHELL_RE = re.compile(r"id=[\"']producttitle[\"']", re.I)
+
+
+def _visible_text(html: str) -> str:
+    """Tag-stripped visible text (scripts/styles removed) — a human's reading order."""
+    stripped = _SCRIPT_STYLE_RE.sub(" ", html or "")
+    m = _BODY_RE.search(stripped)
+    if m:
+        stripped = stripped[m.end():]
+    return _TAG_RE.sub(" ", stripped)
+
+
+def signal_regions(html: str) -> dict:
+    """PURE: the page regions a rot signal may legitimately come from.
+
+    A megabyte-scale retail PDP carries user reviews, Q&A threads and JS strings
+    that mention "doesn't exist", "out of stock", even "captcha" — on a perfectly
+    HEALTHY page. Whole-page substring matching therefore false-positives (real
+    incident: a live Amazon PDP judged dead because one review said "doesn't
+    exist"). Signals are accepted only from:
+
+      * ``title``          — the <title> tag (error pages say so there);
+      * ``early``          — the first screen of visible text (main content
+                             precedes UGC in reading order);
+      * ``availability``   — Amazon's #availability container (offer state);
+      * ``shell``          — structural flag: a #productTitle marker exists, i.e.
+                             the page IS a product page (ids cannot appear in
+                             prose, so this marker is safe page-wide).
+
+    When ``shell`` is true, prose dead/blocked phrases are treated as UGC noise:
+    a product page that renders its title and buybox is not a 404 and not a
+    captcha wall, whatever a review happens to say.
+    """
+    html = html or ""
+    title_m = _GENERIC_TITLE_RE.search(html)
+    visible = _norm(_visible_text(html))
+    avail = ""
+    m = _AVAIL_RE.search(html)
+    if m:
+        avail = _norm(_TAG_RE.sub(" ", html[m.start(): m.start() + 2000]))
+    return {
+        "title": _norm(title_m.group(1)) if title_m else "",
+        "early": visible[:4000],
+        "availability": avail,
+        "shell": bool(_SHELL_RE.search(html)),
+    }
 
 
 def extract_price(html: str) -> Optional[str]:
@@ -117,27 +172,39 @@ def parse_product_page(
     """PURE: classify a fetched product page into an L2 verdict + evidence.
 
     Precedence: blocked > dead > unavailable > price_anomaly > ok.
+    Every prose signal is REGION-SCOPED via ``signal_regions`` (title / first
+    screen of visible text / availability container), and a page that carries a
+    product shell (``#productTitle``) can never be prose-judged dead or blocked —
+    see ``signal_regions`` for the false-positive incident this prevents.
     ``price_anomaly`` is only asserted when a ``claimed_price`` (from the
     surrounding sentence) is supplied and the live price is materially higher.
     """
-    low = _norm(html)
+    regions = signal_regions(html)
     title = extract_title(html)
     price = extract_price(html)
+    prose = (regions["title"], regions["early"])
 
-    sig = _first_match(BLOCKED_PHRASES, low)
-    if sig:
-        return L2Result(verdict="blocked", evidence=f"bot-wall / captcha signal: '{sig}'",
+    sig = next((s for s in (_first_match(BLOCKED_PHRASES, r) for r in prose) if s), None)
+    if sig and not regions["shell"]:
+        return L2Result(verdict="blocked",
+                        evidence=f"bot-wall / captcha signal: '{sig}' (probe-side block; "
+                                 f"user accessibility unknown)",
                         title=title, extracted_price=price, matched_signal=sig)
 
-    sig = _first_match(DEAD_PHRASES, low)
+    sig = next((s for s in (_first_match(DEAD_PHRASES, r) for r in prose)
+                if s and not regions["shell"]), None)
     if sig:
-        return L2Result(verdict="dead", evidence=f"page-not-found signal: '{sig}'",
+        return L2Result(verdict="dead",
+                        evidence=f"page-not-found signal: '{sig}' in title/main content "
+                                 f"(no product shell on the page)",
                         title=title, extracted_price=price, matched_signal=sig)
 
-    sig = _first_match(UNAVAILABLE_PHRASES, low)
-    marker = next((m for m in UNAVAILABLE_MARKERS if m in low), None)
+    marker = next((m for m in UNAVAILABLE_MARKERS if m in _norm(html)), None)
+    sig = _first_match(UNAVAILABLE_PHRASES, regions["availability"]) or (
+        None if regions["shell"] else _first_match(UNAVAILABLE_PHRASES, regions["early"]))
     if sig or marker:
-        ev = f"availability signal: '{sig or marker}'"
+        where = "structural marker" if marker else "availability region"
+        ev = f"unavailable signal: '{sig or marker}' ({where})"
         return L2Result(verdict="unavailable", evidence=ev,
                         title=title, extracted_price=price, matched_signal=sig or marker)
 

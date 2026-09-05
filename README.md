@@ -209,6 +209,60 @@ python scripts/run_evals.py --judge bedrock --full   # score the REAL Judge (nee
 > proven non-vacuous by `test_oracle_catches_a_violating_judge`, which injects a Judge that
 > blindly `REPLACE_URL`s everything and asserts the evaluators flag it.
 
+## Detection honesty & false-positive control
+
+A probe is a **measurement**, not a verdict on what a human will see. EverLink's
+detector runs from a datacenter IP with a script's TLS fingerprint, so it can be
+refused or misled in ways a real browser is not. Treating a probe limitation as
+"the link is broken for users" is the fastest way to lose a publisher's trust, so
+false positives are designed against explicitly:
+
+| False-positive class | Symptom | Defence |
+|---|---|---|
+| **Bot-wall mislabelled as dead-to-users** | A retailer serves the probe a captcha/403; a card then claims the link is "inaccessible to users" | A blocked probe is `needs_human_recheck`, never `dead`. `recheck_policy` (steering hook) + `verification_violation` (policy oracle) allow **only** `ESCALATE_HUMAN` on an inconclusive verdict, and the Judge prompt forbids writing "inaccessible to users" from a probe-side block. |
+| **UGC poisoning a live page** | A healthy product page judged dead because one review said "doesn't exist" | L2 reads **region-scoped** signals only (`<title>`, the first screen of visible text, the `#availability` container). A page carrying the product shell (`#productTitle`) can never be prose-judged dead/blocked — reviews, Q&A and JS strings are noise. A bare `"404"` substring is never a signal (it matches review ids / model numbers); a real 404 is caught by the HTTP status. |
+| **Transient network blip** | A one-off timeout becomes a "needs recheck" card | One polite retry (1.5 s) on `TimeoutException` / `ConnectError` before classifying. |
+| **Rationale contradicting its own evidence** | Card text invents a cause the evidence chain does not show | Judge evidence-discipline rule: the rationale may cite **only** the evidence lines provided. |
+
+**Nothing is auto-fixed on an inconclusive probe.** When the detector cannot prove
+a link is broken, the only permitted outcome is a human click-through. These rules
+are one oracle (`everlink/policy.py`) consumed by *both* the runtime hooks and the
+Evals scoring, so what is enforced in production is exactly what is measured.
+
+### "Why not fetch the links via Google first?"
+
+A reasonable idea — open each link *as if* arriving from a Google search. We
+evaluated it and it does **not** address the root cause:
+
+- Amazon's block keys on **IP reputation and TLS/HTTP fingerprint**, not the
+  `Referer`. A datacenter IP is refused whether it arrives "from Google" or direct,
+  so the referrer path changes nothing that matters.
+- Scraping the SERP itself adds a **second** block surface (Google's own bot-wall)
+  and a ToS question, just to reach a link we already hold.
+
+The honest fix is the one above: **region-scoped measurement** (don't be fooled by
+what a page merely says), **semantic honesty** (a refused probe means "I couldn't
+verify", never "it's dead for everyone"), and a **human-verification loop** as the
+final arbiter — which is the whole point of an "Agents for Humans" submission.
+
+### The human-verification loop
+
+- **On the board**, every decision card resting on a probe verdict shows a
+  one-click **"Open in your browser"** banner (escalated to a warning when the probe
+  was inconclusive), plus clickable URLs in the evidence chain. The reviewer — not
+  the probe — decides.
+- **`python -m everlink recheck`** re-probes pending cards with the *current*
+  detector and retires the ones that no longer reproduce — a card surfaced before a
+  fix would otherwise sit in the inbox as a lie. Dry-run by default; `--apply`
+  rejects + audits proven false positives and never touches a card whose link is
+  still genuinely unhealthy.
+
+```bash
+python -m everlink recheck                 # dry-run: which pending cards are now false positives?
+python -m everlink recheck --apply         # retire + audit them (real problems left alone)
+python -m everlink recheck dec-43dcbc9770  # re-probe one card
+```
+
 ## Dataset (Phase A snapshot)
 
 `scripts/export_slots.py` performs **read-only** `SELECT`s against the three

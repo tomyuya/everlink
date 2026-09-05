@@ -18,6 +18,8 @@ import argparse
 import dataclasses
 import json
 import sys
+import time
+from datetime import datetime, timezone
 
 from . import agents, cards, hitl, notify, steering, writer
 from . import report as reporting
@@ -219,6 +221,96 @@ def cmd_decide(args: argparse.Namespace) -> int:
             ok = store.reject(args.id, args.reason or "")
             print(f"  {'rejected' if ok else 'NOT rejected (missing or not pending)'}: {args.id}")
         return 0 if ok else 1
+    finally:
+        conn.close()
+
+
+def cmd_recheck(args: argparse.Namespace) -> int:
+    """Re-probe pending cards with the CURRENT detector; retire proven false positives.
+
+    A card surfaced before a detector fix — e.g. a live PDP misjudged dead because
+    a review said "doesn't exist", or a probe-side bot-wall misread as "inaccessible
+    to users" — stays in the inbox as a lie until a human catches it. This command
+    re-runs today's detector over each pending card's slots and, when EVERY slot now
+    probes healthy, the card is a proven false positive.
+
+    Default is DRY-RUN: it prints what would be retired and writes nothing.
+    ``--apply`` rejects those cards with an honest auto-recheck reason and audits the
+    retirement. A card with ANY slot still unhealthy is a real problem and is left
+    untouched. Politeness mirrors ``scan``: <=1 request per link, ``--rate-delay`` apart.
+    """
+    from . import db, detect
+
+    try:
+        conn, store = _open_db_store()
+    except RuntimeError as e:
+        print(f"[everlink] recheck unavailable: {e}", file=sys.stderr)
+        return 2
+    try:
+        if args.id:
+            card = store.get(args.id)
+            if card is None:
+                print(f"  no such decision card: {args.id}")
+                return 1
+            if card.status != "pending":
+                print(f"  {args.id} is '{card.status}', not pending; nothing to recheck.")
+                return 1
+            cards_to_check = [card]
+        else:
+            cards_to_check = store.list_by_status("pending", limit=args.limit)
+        if not cards_to_check:
+            print("  no pending decision cards to recheck.")
+            return 0
+
+        print(f"rechecking {len(cards_to_check)} pending card(s) with the current detector "
+              f"(L2={'off' if args.no_l2 else 'on'}, rate_delay={args.rate_delay}s) ...")
+        false_positives: list[tuple] = []              # (card, [CheckResult])
+        for card in cards_to_check:
+            checks = []
+            for slot_id in card.affected_slot_ids:
+                slot = db.fetch_slot(conn, slot_id)
+                if slot is None:
+                    continue
+                checks.append(detect.check_slot(slot, timeout=args.timeout,
+                                                use_l2=not args.no_l2))
+                if args.rate_delay:
+                    time.sleep(args.rate_delay)
+            if not checks:
+                print(f"   * {card.id}: no resolvable slots; skipped.")
+                continue
+            verdicts = ", ".join(f"{c.slot_id}={c.final_verdict}" for c in checks)
+            if all(c.final_verdict == "healthy" for c in checks):
+                false_positives.append((card, checks))
+                print(f"   * {card.id}: FALSE POSITIVE — every slot re-probed healthy "
+                      f"({verdicts}).")
+            else:
+                print(f"   * {card.id}: still a real problem ({verdicts}); left as-is.")
+
+        if not false_positives:
+            print("\n  no false positives found; nothing to retire.")
+            return 0
+        if not args.apply:
+            print(f"\n  --dry-run (default): {len(false_positives)} false-positive card(s) "
+                  f"would be retired. Re-run with --apply to reject + audit them.")
+            return 0
+
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        retired = 0
+        for card, checks in false_positives:
+            verdicts = ", ".join(f"{c.slot_id}={c.final_verdict}" for c in checks)
+            reason = (f"auto-recheck {stamp}: every slot re-probed healthy ({verdicts}); "
+                      f"the original verdict was a false positive.")
+            if store.reject(card.id, reason):
+                retired += 1
+                db.insert_audit(conn, "recheck", "false_positive_retired",
+                                json.dumps({"decision_id": card.id,
+                                            "action": card.proposal.action,
+                                            "slots": [c.slot_id for c in checks],
+                                            "recheck_verdicts": [c.final_verdict for c in checks],
+                                            "reason": reason}, default=str))
+        print(f"\n  retired {retired}/{len(false_positives)} false-positive card(s) "
+              f"(rejected + audited). No real problem card was touched.")
+        return 0
     finally:
         conn.close()
 
@@ -471,6 +563,19 @@ def build_parser() -> argparse.ArgumentParser:
     _ar.add_argument("--reject", action="store_true", help="reject (records --reason)")
     de.add_argument("--reason", default="", help="rejection reason the agent remembers")
     de.set_defaults(func=cmd_decide)
+
+    rc = sub.add_parser("recheck",
+                        help="re-probe pending cards with the current detector; retire false positives")
+    rc.add_argument("id", nargs="?", default=None,
+                    help="one decision id to recheck (default: every pending card)")
+    rc.add_argument("--limit", type=int, default=100, help="max pending cards to recheck (default 100)")
+    rc.add_argument("--rate-delay", type=float, default=1.0, help="seconds between probe requests")
+    rc.add_argument("--timeout", type=float, default=15.0)
+    rc.add_argument("--no-l2", action="store_true", help="L1 only (skip the L2 page re-parse)")
+    rc.add_argument("--apply", action="store_true",
+                    help="actually reject + audit the proven false positives "
+                         "(default is dry-run: print what would be retired, write nothing)")
+    rc.set_defaults(func=cmd_recheck)
 
     wk = sub.add_parser("worker", help="poll + dispatch approved decisions (async track)")
     wk.add_argument("--once", action="store_true", help="drain once and exit (no poll loop)")

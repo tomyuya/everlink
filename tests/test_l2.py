@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from everlink.l2 import (  # noqa: E402
-    extract_price, extract_title, parse_product_page,
+    extract_price, extract_title, parse_product_page, signal_regions,
 )
 
 OK_HTML = """
@@ -81,6 +81,73 @@ def test_extract_helpers():
     assert extract_price(OK_HTML) == "$328.00"
     assert extract_title(OK_HTML) and "Sony" in extract_title(OK_HTML)
     assert extract_price("<html>no money here</html>") is None
+
+
+# --- False-positive regressions (real production incidents) ---------------- #
+# dec-43dcbc9770: a LIVE Amazon PDP was judged "dead" because one customer
+# review far below the fold said "doesn't exist". A page that renders the
+# product shell (#productTitle) must NEVER be prose-judged dead/blocked,
+# whatever user-generated content (reviews / Q&A / JS strings) happens to say.
+_PAD = "<p>Product description filler text. " * 120 + "</p>"  # >2000 chars, keeps UGC out of the availability window
+NOISY_HEALTHY_PDP = (
+    '<html><head><title>Amazon.com: Smart Projector with WiFi 6</title></head><body>'
+    '<span id="productTitle">Smart Projector, 4K Support, Auto Focus, Dolby Audio</span>'
+    '<span class="a-offscreen">$129.99</span>'
+    '<div id="availability">In Stock.</div>'
+    '<button>Add to Cart</button>'
+    + _PAD +
+    '<div id="reviews">'
+    "<p>One star. This listing doesn't exist anymore, page not found on my bookmark.</p>"
+    "<p>Seller said the item has been removed and is out of stock for good.</p>"
+    "<p>Got a robot check / captcha wall when opening on my phone.</p>"
+    '</div>'
+    '<script>var s = "404 validatecaptcha unusual traffic";</script>'
+    '</body></html>'
+)
+# A genuine dead page has NO product shell — the phrase is the whole story.
+SHELL_LESS_DEAD = (
+    '<html><head><title>Amazon.com: Page Not Found</title></head><body>'
+    "<h1>Sorry! We couldn't find that page.</h1>"
+    "<p>The link you followed doesn't exist or has been removed.</p>"
+    '</body></html>'
+)
+# Shell present but a STRUCTURAL out-of-stock marker still wins (ids never
+# appear in prose, so this signal is safe even on a product page).
+SHELL_OUTOFSTOCK = (
+    '<html><body><span id="productTitle">Some Product</span>'
+    '<span class="a-offscreen">$10.00</span>'
+    '<div id="outOfStock">Currently unavailable.</div>'
+    '</body></html>'
+)
+
+
+def test_noisy_healthy_pdp_is_ok_not_dead():
+    # The dec-43dcbc9770 regression: UGC poison must not flip a live PDP to dead.
+    r = parse_product_page(NOISY_HEALTHY_PDP)
+    assert r.verdict == "ok", f"live PDP misjudged as {r.verdict}: {r.evidence}"
+    assert r.title and "Smart Projector" in r.title
+    assert r.extracted_price == "$129.99"
+
+
+def test_signal_regions_detects_shell():
+    regions = signal_regions(NOISY_HEALTHY_PDP)
+    assert regions["shell"] is True
+    assert "smart projector" in regions["title"]
+    # the review prose is real, but the shell flag is what neutralizes it
+    assert regions["shell"] and "doesn't exist" not in regions["early"][:200]
+
+
+def test_shell_less_dead_page_still_dead():
+    # No product shell => the not-found prose is the page's actual message.
+    r = parse_product_page(SHELL_LESS_DEAD)
+    assert r.verdict == "dead"
+
+
+def test_structural_outofstock_beats_shell():
+    # A product page can still be genuinely unavailable via a structural marker.
+    r = parse_product_page(SHELL_OUTOFSTOCK)
+    assert r.verdict == "unavailable"
+    assert "structural marker" in r.evidence
 
 
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
