@@ -139,8 +139,18 @@ export async function getDecisionWithEvidence(
   return { decision, slots, checks };
 }
 
-export async function listAudit(limit = 100): Promise<AuditRow[]> {
+export async function listAudit(limit = 100, event?: string): Promise<AuditRow[]> {
   const sql = getSql();
+  // Optional event-type filter (e.g. ?event=steering_cancel) so a specific trail
+  // stays reachable once the append-only log grows past the page window.
+  const filter = event && /^[a-z_]{3,40}$/.test(event) ? event : undefined;
+  if (filter) {
+    return query<AuditRow[]>(
+      sql`SELECT id, ts, agent, event, payload FROM audit_log
+          WHERE event = ${filter}
+          ORDER BY ts DESC, id DESC LIMIT ${limit}`,
+    );
+  }
   return query<AuditRow[]>(
     sql`SELECT id, ts, agent, event, payload FROM audit_log
         ORDER BY ts DESC, id DESC LIMIT ${limit}`,

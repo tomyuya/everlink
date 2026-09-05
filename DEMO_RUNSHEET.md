@@ -8,7 +8,7 @@
 1. **代理必须先活**：v2rayN（`D:\d36j0t1v\v2rayN\v2rayN.exe`）必须已启动且连上节点；验证 `python d:\qcoder\_proxy_check.py` 输出 `LISTENING`。**刚启动后节点需热身**——第一次导航 vercel.app 可能超时，重试即通。
 2. **board 用生产地址** `https://everlink-seven.vercel.app`（禁 localhost）；录前导航一次首页确认 `Inbox · EverLink Board` 标题出现。
 3. **Judge 模式定档**：生产 mantle 已跑绿（2026-09-04 nightly：3 站 ×25，真实 qwen proposals）→ 默认 `--judge mantle` 录 Shot 3/7，字幕用 **[REAL]**（真实 LLM 调用）；直连 Claude 工单若批了可选 `--judge bedrock`；两者当晚都不可用才退回 `--judge stub` + 文末 **ALT cue**（诚实优先，不许嘴替）。
-4. **数字复核（以屏幕实况为准，2026-09-04 验证）**：23,476（`data/slots_summary.json`）、pending 35 / applied 37 / rejected 4 / healed 37（board 实况）、evals cards 41（fixture 语境）；`[REAL]`/`[SEEDED REPLAY]`/`[EST.]` 角标照 DEMO_SCRIPT 三标签执行。
+4. **数字复核（以屏幕实况为准，2026-09-05 复探）**：23,476（`data/slots_summary.json` 未变）；board 实况 **pending 16 / applied 37 / rejected 69 / healed 37**——69 条 rejected = 4 人工typed驳回 + 54 条 nightly recheck 误报退役 + 11 条 09-05 系统去重驳回，全部带理由落库；audit 全量 **steering_cancel 3 / write 38 / verify 38 / rollback 1 / dead_letter 1**（事件名是 write/verify，不存在 apply）；evals cards 41（fixture 语境）。`[REAL]`/`[SEEDED REPLAY]`/`[EST.]` 角标照 DEMO_SCRIPT 三标签执行。
 5. **遮敏**：DB host、带 token 的 URL、`.env`、scan 输出里的联盟 tag（`tag=aethelgem2026-20`）blur/裁掉。
 6. 字幕烧录或后期贴：每条 cue ≤ 2 行；角标标签与字幕同时出现。
 7. **录屏范围**：全屏，须同时罩住 **IDE 终端面板**（终端镜头）与 **IDE 内置 Browser view 面板**（board/外站镜头）；IDE 最大化，无关窗口移出。Browser view 若关闭，我 navigate 即唤醒（演练已验证）。
@@ -48,7 +48,7 @@
 | 1:07–1:15 | The Scanner probes every slot: HTTP status and redirect chains first, a stealthy page parse only when inconclusive. | Scanner 先探 HTTP 状态与重定向链，拿不准才做深层页面解析。 |
 | 1:15–1:23 | The Judge — a real LLM on Amazon Bedrock — decides the fix and emits a structured Proposal. **[REAL]** | Judge（Amazon Bedrock 上的真实 LLM）决定修法并输出结构化 Proposal。**[真实调用]**（mantle/bedrock 均为真实；仅退回 stub 时换 ALT-1） |
 | 1:23–1:29 | Blocked or timed out? Flagged needs_human_recheck — it never fabricates a result. | 被墙或超时？标记 needs_human_recheck——绝不编造结果。 |
-| 1:29–1:35 | By morning: 35 problem slots in my inbox, as a morning brief. **[SEEDED REPLAY]** | 早上：35 个问题槽位以晨报形式到达。**[种子回放]** |
+| 1:29–1:35 | By morning: 16 problem slots in my inbox, as a morning brief. **[REAL + SEEDED REPLAY]** | 早上：16 个问题槽位以晨报形式到达（nightly 真实提案 + 种子回放卡，各自带标签）。**[真实+种子回放]** |
 
 ## Shot 4 · 1:35–2:15 · 决策收件箱 [SEEDED]
 
@@ -58,25 +58,25 @@
 |---|---|---|
 | 1:35–1:42 | The only screen I open: a minimal approval inbox. | 我唯一打开的界面：一个极简审批收件箱。 |
 | 1:42–1:50 | Low-risk fixes are batched — 37 applied and verified so far. **[SEEDED REPLAY]** | 低风险修复批量处理——已应用并验证 37 条。**[种子回放]** |
-| 1:50–1:58 | The risky ones I read individually — here, four rejections, each with a typed reason. | 高风险的我逐条读——这里 4 条驳回，每条都写了理由。 |
+| 1:50–1:58 | The risky ones I read individually — rejections like this carry a typed reason; false positives the recheck retires land in the same list, reasoned. | 高风险的我逐条读——像这条驳回带着写明的理由；nightly recheck 退役的误报也进同一清单，同样有理由落库。 |
 | 1:58–2:06 | The agent remembers that reason and won't re-propose the same fix next week. | agent 记住理由，下周不会重提同样的修复。 |
 | 2:06–2:15 | Every card carries its evidence: the HTTP trail, the page context, and the policy that shaped it. | 每张卡都带证据：HTTP 轨迹、页面上下文、以及塑造它的策略。 |
 
 ## Shot 5 · 2:15–2:50 · 安全幕 1：披露守护
 
-画面：Browser view **`/audit`**（237 行事件流）→ 页内脚本滚动定位 `steering_cancel` 行（共 3 条）→ 打开 **`/decision/dec-d75e0275a8`**（Pending · High risk · Escalate to human，诚实 escalate rationale 可见）。
+画面：Browser view **`/audit?event=steering_cancel`**（过滤条显示 3 行，disclosure_policy 的 cancel_message 可见；不带过滤时埋深 1870 行不可达）→ 打开 **`/decision/dec-2b91672858`**（Rejected · 人工 typed 理由："Acknowledged — the disclosure block is structurally protected, so NO write is allowed"）。旧 escalate 卡 dec-d75e0275a8 已被 recheck 退役（404），弃用。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
 | 2:15–2:22 | This block is a dead link — but it also carries my affiliate disclosure. | 这个块是死链——但它同时承载我的联盟披露声明。 |
 | 2:22–2:30 | Deleting it would be a legal and trust disaster. | 删掉它等于法律与信任灾难。 |
 | 2:30–2:38 | A DisclosurePolicy steering hook marks the slot protected and cancels the drop before it happens. | DisclosurePolicy 引导钩子把槽位标为受保护，在删除发生前取消工具调用。 |
-| 2:38–2:45 | The audit log records steering_cancel; the card downgrades to escalate-to-human. | 审计日志记下 steering_cancel；卡片降级为上报人工。 |
+| 2:38–2:45 | The audit log records steering_cancel; the decision went to a human, who confirmed on the record: no write may touch it. | 审计日志记下 steering_cancel；决策随后到人工，录在案的确认：任何写动作碰不了这个块。 |
 | 2:45–2:50 | Disclosure text is structurally immune — no write action can touch it. | 披露文本结构性免疫——任何写动作碰不了它。 |
 
 ## Shot 6 · 2:50–3:40 · 安全幕 2 + 闭环 [REAL/SEEDED]
 
-画面（全 URL 导航）：(a) 打开 **`/decision/dec-b21f3d82bc`**（Applied · High risk · Replace URL：Aurora Lab-Grown Diamond Solitaire 死链→活 offer，Evidence 区块含旧/新 URL）；(b) `/audit` 滚动到 `apply`（1 条，单事务）与 `verify`（84 条，复探）事件行；(c) `/report`：**Links healed 37 / Slots fixed 37**；(d) `/audit` 的 `rollback` 行（2 条）。**展示已落库闭环，不现场触发。**
+画面（全 URL 导航）：(a) 打开 **`/decision/dec-b21f3d82bc`**（Applied · High risk · Replace URL：Aurora Lab-Grown Diamond Solitaire 死链→活 offer，Evidence 区块含旧/新 URL）；(b) **`/audit?event=write`**（38 行，每条 applied 修复一行、单事务）与 **`/audit?event=verify`**（38 行复探）；(c) `/report`：**Links healed 37 / Slots fixed 37**；(d) **`/audit?event=rollback`**（1 行）+ **`/audit?event=dead_letter`**（1 行，强制失败死信对）。**展示已落库闭环，不现场触发。**
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -100,14 +100,14 @@
 
 ## Shot 8 · 4:10–4:40 · 通用适配器 + live demo
 
-画面：IDE 终端 `python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`（实测 ~10s：8/8 healthy + dry-run 诚实行）→ 切 Browser view：生产 board 首页（Vercel）。
+画面：IDE 终端 `python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`（实测 ~10s：8/8 healthy + dry-run 诚实行）→ 切 Browser view：生产 board 首页（Vercel）→ **`/how-it-works`**（公开介绍页：品牌面板 logo 链仓库、页脚 GitHub + 联系邮箱；09-05 新增镜头）。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
 | 4:10–4:18 | This isn't hard-coded to my sites: a generic adapter scans any blog, read-only. | 这不是为我站硬编码：generic 适配器只读扫描任意博客。 |
 | 4:18–4:26 | Here it is on a site EverLink has never seen. | 这是一个 EverLink 从没见过的站。 |
-| 4:26–4:34 | And here's the live board — seeded so there's always something real to look at. | 这是线上 board——种子数据保证总有真东西可看。 |
-| 4:34–4:40 | Read-only by design. | 只读是设计决定。 |
+| 4:26–4:33 | And here's the live board — seeded so there's always something real to look at. | 这是线上 board——种子数据保证总有真东西可看。 |
+| 4:33–4:40 | Public intro page, repo link, contact — open source, self-hosted, read-only by design. | 公开介绍页、仓库链接、联系邮箱——开源、自托管、只读是设计决定。 |
 
 ## Shot 9 · 4:40–5:00 · 收尾
 
@@ -139,10 +139,13 @@ S3/S8 首页   https://everlink-seven.vercel.app/
 S4  applied  https://everlink-seven.vercel.app/?status=applied
 S4  rejected https://everlink-seven.vercel.app/?status=rejected
 S4  驳回卡   https://everlink-seven.vercel.app/decision/dec-7158d74e33
-S5  audit    https://everlink-seven.vercel.app/audit          (steering_cancel ×3)
-S5  升级卡   https://everlink-seven.vercel.app/decision/dec-d75e0275a8
+S5  audit过滤 https://everlink-seven.vercel.app/audit?event=steering_cancel   (3 行+过滤条)
+S5  披露卡   https://everlink-seven.vercel.app/decision/dec-2b91672858        (Rejected·typed 理由确认不写)
 S6  applied卡 https://everlink-seven.vercel.app/decision/dec-b21f3d82bc
+S6  write/verify https://everlink-seven.vercel.app/audit?event=write · ?event=verify   (38/38 行)
+S6  rollback对 https://everlink-seven.vercel.app/audit?event=rollback · ?event=dead_letter  (1/1 行)
 S6  report   https://everlink-seven.vercel.app/report         (Links healed 37)
+S8  介绍页   https://everlink-seven.vercel.app/how-it-works   (品牌面板+页脚链接，09-05 新增)
 字卡        file:///d:/qcoder/_demo_cards.html#stats · #cards · #end
 外站        https://www.aethelgem.com (1.5-3s) · https://hotdeals.today (~12s，nav 报超时属正常)
 第三站      flashdeals.today（内部代号 sandcart = FlashDeals 独立站，HTTP 200 可达，演示不做实时导航）· 无 sandcart.com 域名
@@ -160,7 +163,7 @@ S6  report   https://everlink-seven.vercel.app/report         (Links healed 37)
 | evals --full --trace | 22s；OVERALL PASS（50/50、0、三项 100%、cards 41） |
 | generic blog.python.org | ~10s；8/8 healthy + dry-run 行 |
 | 字卡三页 | file:// 渲染 OK（#stats/#cards/#end） |
-| 已知坑 | Qoder 崩溃会带走 Browser view（navigate 唤醒）与代理（_start_proxy.py 拉起）；节点刚起时 vercel.app 首航超时须重试；hotdeals 导航工具超时但页面会渲染；audit 事件名是 apply/verify（非 apply_fix/verify_fix） |
+| 已知坑 | Qoder 崩溃会带走 Browser view（navigate 唤醒）与代理（_start_proxy.py 拉起）；节点刚起时 vercel.app 首航超时须重试；hotdeals 导航工具超时但页面会渲染；audit 事件名是 write/verify/rollback/dead_letter（**不存在 apply**）；列表页（/、applied、rejected）为客户端渲染，httpx 探针只见空壳，画面内容以 Browser DOM 核验；cmd 单个 `&` 是异步执行，别误判同步完成 |
 
 所有 `--dry-run`：零写库、零发送；屏幕上的诚实行（"nothing written to any database" / "nothing sent"）是加分画面，**不要剪掉**。
 

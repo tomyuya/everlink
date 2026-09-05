@@ -72,17 +72,18 @@ Board showing the seeded problem queue.
 > and emits a structured `Proposal`. **[REAL]** The detection is deterministic code; the
 > judgment is a live model call. Anything blocked or timed out is flagged
 > `needs_human_recheck` — the agent knows its limits and never fabricates a result. By
-> morning, **41 problem slots** are waiting **[SEEDED REPLAY for the demo queue]**, pushed
-> to me as a morning brief. It surfaces as a notification, not an app."
+> morning, **16 problem slots** are waiting **[live nightly proposals + seeded replay
+> cards, each labelled]**, pushed to me as a morning brief. It surfaces as a
+> notification, not an app."
 
 ---
 
 ## Shot 4 — 1:35–2:15 · The decision inbox · **Design**
 
-**On screen:** the Decision Board. A batch of low-risk cards → **approve 38**. Three
-medium/high cards reviewed one by one → **reject 3**, typing a reason. Zoom a
-**cross-article merged card** (the same dead product cited in two articles → one decision).
-Show the reject reason being stored.
+**On screen:** the Decision Board. The low-risk batch → **37 applied and verified**.
+Risky cards reviewed one by one → typed rejections; false positives the nightly recheck
+retires share the same list, each with its reason on record. Zoom a rejection card with
+its typed reason.
 
 **Voiceover:**
 > "The only screen I open is a minimal approval inbox. Low-risk fixes are batched — I
@@ -98,8 +99,10 @@ Show the reject reason being stored.
 
 **On screen:** a block whose sentence contains an affiliate-disclosure keyword
 ("affiliate", "commission", "we may earn"). It's also a dead link. The Judge proposes
-`DROP_BLOCK` — and the Steering hook **cancels** the tool call. Show the `audit_log` line
-`steering_cancel` and the card downgrading to `ESCALATE_HUMAN`.
+`DROP_BLOCK` — and the Steering hook **cancels** the tool call. Show
+`/audit?event=steering_cancel` (the `steering_cancel` rows) and the disclosure slot's
+decision card carrying the human's typed acknowledgement (`dec-2b91672858`: no write may
+touch the protected block).
 
 **Voiceover:**
 > "Here's the guardrail I care about most. This block is a dead link — but it also carries
@@ -115,9 +118,11 @@ Show the reject reason being stored.
 **On screen:** (a) An approved `REWRITE_SENTENCE` — show the before/after: the price claim
 in the old sentence is removed or explicitly downgraded, not silently carried onto a new
 link (`EditorialPolicy`). (b) The approved write executes: `snapshot_block` → `apply_fix`
-in a **single transaction** → `verify_fix` re-probes the new URL. Show the dead-count drop
-**37 → 0**, all green. (c) Then force one `verify_fix` to fail and show the **rollback**
-restore the original block + emit a rollback-recommendation card.
+in a **single transaction** → `verify_fix` re-probes the new URL (board audit filters on
+screen: `/audit?event=write`, `/audit?event=verify`). Show the dead-count drop
+**37 → 0**, all green. (c) The one forced-fail on record: the **rollback** restored the
+original block and dead-lettered the decision with a recommendation card
+(`/audit?event=rollback` + `/audit?event=dead_letter`).
 
 **Voiceover:**
 > "An editorial policy makes sure a rewritten sentence never keeps a stale price or
@@ -158,8 +163,9 @@ never empty).
 **Voiceover:**
 > "This isn't hard-coded to my sites. A `generic` adapter will scan **any** blog — read-only
 > — and hand back a link-rot report. Here it is on a site EverLink has never seen. And
-> here's the live board, seeded so there's always something real to look at. **[live URL if
-> deployed; otherwise show the local board and say so honestly.]**"
+> here's the live board, seeded so there's always something real to look at. The public
+> intro page ships with it — open source, self-hosted, repo and contact in the footer.
+> **[live URL if deployed; otherwise show the local board and say so honestly.]**"
 
 ---
 
