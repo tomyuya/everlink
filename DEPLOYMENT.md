@@ -120,7 +120,7 @@ EVERLINK_FORBIDDEN_HOSTS=…      # optional extra deny-list
 # Surfacing
 RESEND_API_KEY=…   RESEND_FROM=EverLink <brief@yourdomain.com>   EVERLINK_NOTIFY_EMAIL=you@x.com
 TELEGRAM_BOT_TOKEN=…   TELEGRAM_CHAT_ID=…
-EVERLINK_BOARD_URL=https://<your-board>.vercel.app   # linked from every notification
+EVERLINK_BOARD_URL=https://<your-board>.vercel.app   # board ROOT; notifications deep-link to /inbox, /decision/<id>, /report
 
 # Cron tuning (all optional — sensible defaults are built in)
 EVERLINK_NIGHTLY_SITES=aethelgem,sandcart,hotdeals
@@ -242,7 +242,7 @@ scan → notify → worker chain against the live DB.
 | `<SITE>_PUBLIC_ORIGIN` | agent (scan) | Public origin for absolutizing a site's relative internal links; symmetric with `<SITE>_DATABASE_URL`; unset = leave relative URLs as-is |
 | `RESEND_API_KEY`, `RESEND_FROM`, `EVERLINK_NOTIFY_EMAIL` | agent | email push (all three required to activate) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | agent | optional Telegram push |
-| `EVERLINK_BOARD_URL` | agent | board link embedded in every notification |
+| `EVERLINK_BOARD_URL` | agent | board ROOT embedded in every notification (deep-linked to `/inbox`, `/decision/<id>`, `/report`) |
 | `EVERLINK_NIGHTLY_SITES`, `EVERLINK_JUDGE`, `EVERLINK_WEEKLY_DAY` | agent (cron) | nightly chain tuning |
 
 See `.env.example` (agent) and `board/.env.example` (board) for annotated placeholders.
