@@ -151,24 +151,34 @@ railway run python scripts/nightly.py                          # the real full c
 > 2026-12-01, which covers the hackathon). The same start command + cron schedule can be set in
 > the dashboard or via Railway's Infrastructure-as-Code if you prefer the non-deprecated path.
 
+> Observed platform behavior: Railway also runs the start command **once per deployment**
+> (not only on the cron schedule), so every `git push` / redeploy performs one full nightly —
+> including its notify step. Plan pushes accordingly, or accept one duplicate nightly per
+> deploy as the cost of shipping.
+
 ### Data provisioning for the first-party scan (important, honest)
 
-The agent image is **pure code** — it bakes **no** production content. The three first-party
-adapters read `data/slots_<site>.csv` (the Phase-A read-only export that carries the
-`protected`/disclosure flags), and those CSVs are **gitignored**, so a repo-based Railway build has
-none and a first-party `scan` finds 0 slots. Choose one:
+The three first-party adapters read `data/slots_<site>.csv` (the Phase-A read-only export
+that carries the `protected`/disclosure flags). **This repo commits those CSVs** (they are
+the maintainer's own sites' public link mirrors — URLs and flags only, no secrets) and the
+Dockerfile `COPY data/` bakes them into the image, so a repo-based Railway build scans out
+of the box: this deployment patrols 77 first-party slots every night.
+
+If your fork must NOT carry site link data in git, negate the CSVs in `.gitignore` and
+choose one:
 
 1. **Volume mount** (recommended): export locally (`python scripts/export_slots.py`), then attach
    the CSVs to the service at `/app/data` via a Railway volume.
 2. **Private prebuilt image**: `docker build` on a machine where `data/slots_*.csv` exist, then
    push to a **private** registry and deploy that image. (The image then contains your own sites'
-   link data — keep the registry private; the public git repo never does.)
+   link data — keep the registry private.)
 3. **Zero-data / demo**: the read-only `generic` adapter needs no CSV —
    `python -m everlink scan --site https://any-site/sitemap.xml` crawls live. This is the
    §11 "scan any blog" demo shot and works out-of-the-box in the container.
 
-The **live demo inbox does not depend on the container scanning**: it runs off the seed dataset
-injected into Neon (see `scripts/` seed tooling, Phase F), so judges always see a populated board.
+The board shows whatever lives in `EVERLINK_DATABASE_URL` — in this deployment, the real
+nightly's output. For a fresh or offline demo DB, use the seed tooling in `scripts/`
+(Phase F) to populate one.
 
 ### Public origin per site (`<SITE>_PUBLIC_ORIGIN`)
 
