@@ -147,13 +147,16 @@ Bedrock with the identical harness: `run_evals --judge mantle --full`.
 Every agent is `build_scanner(model)` / `build_judge(model)` / `build_writer(conn, model)`.
 The `model` is any `strands.models.Model`, injected at a single seam (`everlink/llm.py`).
 Nothing downstream — detection, steering, queue, writer, evals — knows or cares which
-provider it is. The submission path is `BedrockModel` (Claude), but the same seam accepts
-`AnthropicModel`, `OpenAIModel`, `GeminiModel`, `MistralModel`, `OllamaModel`,
-`LiteLLMModel`, `SageMakerAIModel`, or a `ModelRouter` with a `FallbackStrategy` for
-multi-provider failover. Within Bedrock, the model id and region are env-overridable, so
-moving between Claude variants or cross-region inference profiles is zero code change.
+provider it is. The deployed path today is `OpenAIModel` pointed at AWS's Bedrock Mantle
+gateway (a real qwen judge — it sidesteps the account-level Anthropic allowlist gate that
+blocks direct SigV4 Claude); `BedrockModel` (direct Claude) sits on the same seam and runs
+the moment that gate clears, as do `AnthropicModel`, `GeminiModel`, `MistralModel`,
+`OllamaModel`, `LiteLLMModel`, `SageMakerAIModel`, or a `ModelRouter` with a
+`FallbackStrategy` for multi-provider failover. Within Bedrock, the model id and region are
+env-overridable, so moving between Claude variants or cross-region inference profiles is
+zero code change.
 
-The whole 253-test suite *and* the 50-case Evals run on an injected offline `StubModel`,
+The whole 312-test suite *and* the 50-case Evals run on an injected offline `StubModel`,
 which is the real proof of provider-independence: the orchestration is exercised with no
 cloud dependency at all.
 

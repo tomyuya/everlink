@@ -28,7 +28,7 @@ flowchart LR
     end
 
     subgraph EXT["External services"]
-        BR["Amazon Bedrock<br/>(Claude via Strands)"]
+        BR["Amazon Bedrock<br/>(Mantle gateway: qwen today,<br/>Claude when allowlisted)"]
         RS["Resend<br/>(email)"]
         TG["Telegram Bot API"]
         OT["OTLP collector<br/>(optional tracing)"]

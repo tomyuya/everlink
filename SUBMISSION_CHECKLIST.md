@@ -74,7 +74,7 @@ click submit on Devpost). Those stay open by design and are the last mile.
 
 | Criterion | Where we score it | Status |
 |---|---|---|
-| Technological Implementation | Strands multi-agent (Orchestrator→Scanner→Judge→Writer), Hooks (audit + write gate), Evals (50-case), Bedrock Claude, OpenTelemetry tracing; AgentCore documented as stretch | [x] |
+| Technological Implementation | Strands multi-agent (Orchestrator→Scanner→Judge→Writer), Hooks (audit + write gate), Evals (50-case), a real Bedrock model (qwen via the Mantle gateway; direct Claude allowlist-gated), OpenTelemetry tracing; AgentCore documented as stretch | [x] |
 | Design | Decision Board UX (Next.js): public landing + `/how-it-works` primer, filterable `/inbox` (`?status=`), evidence-chain card detail, navigable audit trail (`?event=`), weekly `/report`; Structured-Output `Proposal` cards; two-track Interrupt approval flow | [x] |
 | Potential Impact | `verify_fix` re-probe + snapshot rollback closes the loop on real production links (23,476-slot Phase A dataset) | [x] |
 | Creativity & Originality | 4 Steering policies (Disclosure / Editorial / Scope / Write) | [x] |

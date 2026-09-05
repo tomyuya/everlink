@@ -46,8 +46,9 @@ EverLink is an autonomous link *steward*, not another reporter. Every night:
    detects rot — HTTP status and redirect-chain analysis at L1, a stealthy page parse at L2
    only where L1 is inconclusive. An affiliate hop that loses its tracking parameter means
    the program ended, even on a 200 response.
-2. **It decides.** A Judge agent (Claude on Amazon Bedrock) drafts a structured fix
-   `Proposal` for each problem — and four Steering policies constrain it (see below).
+2. **It decides.** A Judge agent (a real LLM on Amazon Bedrock — qwen through AWS's Bedrock
+   Mantle gateway) drafts a structured fix `Proposal` for each problem — and four Steering
+   policies constrain it (see below).
 3. **It surfaces.** Proposals aggregate into decision cards (duplicates across articles
    merge into one), pushed to me by email / Telegram as a morning brief. *It surfaces as a
    notification, not an app.*
@@ -68,7 +69,9 @@ production data).
 
 ### How we built it
 
-**Strands Agents SDK** throughout, **Amazon Bedrock** (Claude) as the model.
+**Strands Agents SDK** throughout, **Amazon Bedrock** as the model (qwen via the Bedrock
+Mantle gateway today; direct Claude the moment the account's allowlist gate clears — see
+"Any model, one seam" below).
 
 - **Multi-agent as an Agent-as-Tool pipeline** — an Orchestrator composes a Scanner, a
   Judge, and a Writer as tools. Deliberately *not* a Swarm: the task is a sequential
