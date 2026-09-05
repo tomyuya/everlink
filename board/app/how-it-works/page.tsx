@@ -39,8 +39,8 @@ export default function HowItWorksPage() {
 /** One-glance positioning: open-source, self-hosted, NOT a SaaS. */
 function Positioning() {
   return (
-    <section className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-center">
-      <div className="space-y-3 lg:max-w-[38rem]">
+    <section className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:pr-[calc(50%-428px)]">
+      <div className="min-w-0 space-y-3 lg:flex-1">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           How EverLink works
         </h1>
