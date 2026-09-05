@@ -62,12 +62,19 @@ export function relativeTime(iso?: string | null): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return `${new Date(iso).toISOString().slice(0, 10)} UTC`;
 }
 
+/**
+ * Absolute timestamp, always rendered in UTC with an explicit zone suffix
+ * ("2026-09-04 23:27:55 UTC"). The product runs on a UTC cron against a UTC
+ * database while viewers sit in many zones, so local-time rendering was
+ * ambiguous — every absolute time on the board carries its zone.
+ */
 export function formatDateTime(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
+  const [day, time] = d.toISOString().split(".")[0].split("T");
+  return `${day} ${time} UTC`;
 }

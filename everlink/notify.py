@@ -25,7 +25,7 @@ from __future__ import annotations
 import html
 import os
 from dataclasses import dataclass, field
-from datetime import date as _date, datetime as _datetime, timezone
+from datetime import datetime as _datetime, timezone
 from typing import Callable, Iterable, Optional
 
 import httpx
@@ -82,7 +82,7 @@ class MorningBrief:
     knows; composers omit anything left ``None``/empty, so a partial brief is honest
     rather than padded with invented figures."""
 
-    date: str = ""                                   # ISO yyyy-mm-dd; defaults to today
+    date: str = ""                                   # ISO yyyy-mm-dd; defaults to today (UTC)
     headline: str = ""
     slots_scanned: Optional[int] = None
     problem_slots: Optional[int] = None              # link slots awaiting a decision
@@ -247,9 +247,27 @@ def compose_batch_list(cards: list[Decision], board_url: str = "") -> Note:
     return Note(subject=subject, text=text, html=body)
 
 
+def _utc_label(iso: str) -> str:
+    """Human-readable UTC stamp ('2026-09-05 03:00:07 UTC') from an ISO instant.
+
+    Every human-facing timestamp EverLink composes carries its zone explicitly:
+    the cron, the database, and the digests all live in UTC, while readers live
+    everywhere. Naive inputs are treated as UTC (the store's convention);
+    unparseable inputs pass through untouched rather than being guessed at.
+    """
+    try:
+        dt = _datetime.fromisoformat(iso)
+    except ValueError:
+        return iso
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 def compose_morning_brief(brief: MorningBrief, board_url: str = "") -> Note:
     """The morning digest (spec §11 demo: "早间报告 … + 邮件推送镜头")."""
-    day = brief.date or _date.today().isoformat()
+    day = brief.date or _datetime.now(timezone.utc).date().isoformat()
+    day = day if day.endswith("UTC") else f"{day} UTC"   # the brief's day boundary is UTC
     tail = ""
     if brief.problem_slots:
         tail = f" · {brief.problem_slots} link(s) need a decision"
@@ -317,7 +335,8 @@ def compose_weekly_report(report: WeeklyReport, board_url: str = "") -> Note:
     breakdowns. An empty window is reported honestly ("Nothing to report yet"), never
     padded with invented activity — the digest and the board are one source of truth.
     """
-    day = report.generated_at or _datetime.now(timezone.utc).isoformat(timespec="seconds")
+    day = _utc_label(report.generated_at
+                     or _datetime.now(timezone.utc).isoformat(timespec="seconds"))
     href = board_url.rstrip("/") if board_url else ""
     link = f"{href}/report" if href else ""
     subject = (f"[EverLink] Weekly report · {report.window_days}d · "
