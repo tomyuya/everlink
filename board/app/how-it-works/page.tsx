@@ -39,8 +39,8 @@ export default function HowItWorksPage() {
 /** One-glance positioning: open-source, self-hosted, NOT a SaaS. */
 function Positioning() {
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
-      <div className="space-y-3">
+    <section className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-center">
+      <div className="space-y-3 lg:max-w-[38rem]">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           How EverLink works
         </h1>
@@ -73,16 +73,25 @@ function BrandPanel() {
   return (
     <div
       aria-label="EverLink brand"
-      className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-zinc-200 bg-white px-6 py-10 dark:border-zinc-800 dark:bg-zinc-900"
+      className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-zinc-200 bg-white px-6 py-10 dark:border-zinc-800 dark:bg-zinc-900 lg:w-[22rem] lg:shrink-0"
     >
-      {/* Same asset as the nav mark (public/everlink-mark.svg), scaled up. */}
-      <img
-        src="/everlink-mark.svg"
-        alt="EverLink logo"
-        width={112}
-        height={112}
-        className="h-28 w-28"
-      />
+      {/* Same asset as the nav mark (public/everlink-mark.svg), scaled up; links to the repo. */}
+      <a
+        href="https://github.com/tomyuya/everlink"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="EverLink on GitHub"
+        aria-label="EverLink on GitHub"
+        className="rounded-3xl transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-sky-500"
+      >
+        <img
+          src="/everlink-mark.svg"
+          alt="EverLink logo"
+          width={112}
+          height={112}
+          className="h-28 w-28"
+        />
+      </a>
       <div className="text-center">
         <div className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           EverLink
