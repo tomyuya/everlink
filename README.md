@@ -17,8 +17,8 @@ compact decision card **only when a human judgment is actually needed**.
 > seeded-replay cards, so the queue is never empty for a reviewer). Suggested path: the
 > landing page → **`/how-it-works`** (product primer) → **`/inbox`** (decision queue,
 > `?status=` filters) → a card's evidence chain → **`/audit?event=steering_cancel`** (the
-> guardrail firing — one filter away from ~1,900 rows of nightly traffic, where those 3
-> rows would otherwise be buried) → **`/report`**.
+> guardrail firing — one filter away from ~2,000 rows of nightly traffic that keep
+> growing every night, where those 3 rows would otherwise be buried) → **`/report`**.
 > It is served with `NEXT_PUBLIC_BOARD_READONLY=1`, so approve/reject is disabled on the
 > public deployment — the approval flow is demonstrated in the video instead. Your own
 > deployment leaves that flag off and decides for real.

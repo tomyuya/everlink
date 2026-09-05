@@ -15,6 +15,7 @@
 5. **遮敏**：DB host、带 token 的 URL、`.env`、scan 输出里的联盟 tag（`tag=aethelgem2026-20`）blur/裁掉；board 卡片 Evidence 里的联盟 tag 同样要遮——09-05 二遍演练实测：`dec-b21f3d82bc` 的 Evidence 只渲染**应用后的新 URL**（`https://www.amazon.com/dp/…?tag=aethelgem-20`，Healthy HTTP 200），并不并列旧 URL，该 `tag=aethelgem-20` 需遮。
 6. 字幕烧录或后期贴：每条 cue ≤ 2 行；角标标签与字幕同时出现。
 7. **录屏范围**：全屏，须同时罩住 **IDE 终端面板**（终端镜头）与 **IDE 内置 Browser view 面板**（board/外站镜头）；IDE 最大化，无关窗口移出。Browser view 若关闭，我 navigate 即唤醒（演练已验证）。
+8. **push 与录制的先后**：每次 `git push` 都会触发 Railway 部署并**跑一次完整 nightly**——09-05 09:17→09:32 UTC 实测 audit 事件持续上涨（`tool_result` 1662→1716、`notify` 100→102），跑完才停（本次未产生新卡，计数仍是 16/37/69，但这是运气不是保证）。所以顺序必须是 **改完 → push → 等 nightly 跑完（探针两次读数不再变）→ 复探计数 → 录**；录前 6 步跑完之后不要再 push。audit 总量因此是**动值**（09-05 实测 **1,994** 行），文案统一写 "~2,000 rows" 不写死。
 
 ---
 
@@ -67,7 +68,7 @@
 
 ## Shot 5 · 2:15–2:50 · 安全幕 1：披露守护
 
-画面：Browser view **`/audit?event=steering_cancel`**（过滤条显示 3 行，disclosure_policy 的 cancel_message 可见；不带过滤时埋深 1870 行不可达）→ 打开 **`/decision/dec-2b91672858`**（Rejected · 人工 typed 理由："Acknowledged — the disclosure block is structurally protected, so NO write is allowed"）。旧 escalate 卡 dec-d75e0275a8 已被 recheck 退役（404），弃用。
+画面：Browser view **`/audit?event=steering_cancel`**（过滤条显示 3 行，disclosure_policy 的 cancel_message 可见；不带过滤时埋在近 2,000 行里不可达——09-05 09:32 UTC 实测 audit 总量 **1,994** 行，每晚还涨几十行，字幕/文案统一说 "~2,000 rows" 不写死）→ 打开 **`/decision/dec-2b91672858`**（Rejected · 人工 typed 理由："Acknowledged — the disclosure block is structurally protected, so NO write is allowed"）。旧 escalate 卡 dec-d75e0275a8 已被 recheck 退役（404），弃用。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|

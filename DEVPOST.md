@@ -60,7 +60,7 @@ EverLink is an autonomous link *steward*, not another reporter. Every night:
 6. **It reports.** A weekly digest plus a full audit log of every tool call — and the log is
    *navigable*: `/audit?event=steering_cancel` (or `write` / `verify` / `rollback` /
    `dead_letter`) filters straight to the rows behind any claim made here, instead of
-   leaving them buried under ~1,900 nightly events.
+   leaving them buried under ~2,000 nightly audit events — a log that grows every night.
 
 **Who it's for:** independent publishers, affiliate creators, and small content teams —
 one to three people running several sites. The first user is me (dogfooding on real
