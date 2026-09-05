@@ -24,13 +24,21 @@ click submit on Devpost). Those stay open by design and are the last mile.
       rendered natively by GitHub (pg1 · `de01ec1`).
       - [ ] (owner) also upload it to Devpost's *separate* "Architecture Diagram" field.
 - [ ] (owner) **4. Demo video ≤ 5:00** — pitch covers **problem / who / why** (spec §11
-      storyboard). Script + shot list are drafted → [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md);
-      recording/voice-over is the owner step.
+      storyboard). Narration → [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md); second-by-second shot list,
+      live URLs, measured timings and the pre-record checklist →
+      [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md). All 9 shots were rehearsed end-to-end against
+      the live board on **2026-09-05** (real mantle judge, 39s; every board URL DOM-verified),
+      so recording is a straight replay of that rehearsal — pressing record is the only owner
+      step left.
 - [ ] (owner) **5. AWS Builder ID** — registered, and **$200 credits** claimed.
-- [ ] (owner) **6. Live demo link** *(bonus)* — deploy scaffold is ready
-      ([`DEPLOYMENT.md`](DEPLOYMENT.md): Vercel board + Neon + Railway/AgentCore cron,
-      pf1 · `9f05e30`; seed dataset pf2 · `723668b` keeps the inbox non-empty). The actual
-      deploy + URL is the owner step.
+- [x] **6. Live demo link** *(bonus)* — **https://everlink-seven.vercel.app** (Vercel board +
+      Neon Postgres + Railway nightly cron; scaffold pf1 · `9f05e30`, seed dataset pf2 ·
+      `723668b` keeps the inbox non-empty). Served **read-only**
+      (`NEXT_PUBLIC_BOARD_READONLY=1` → decision writes refused `403`), so an anonymous
+      reviewer can never approve a fix that the nightly worker would then apply to live
+      content. Public pages: `/` landing · `/how-it-works` primer · `/inbox` (`?status=`) ·
+      `/decision/[id]` evidence chain · `/audit` (`?event=`) · `/report`.
+      - [ ] (owner) paste the URL into Devpost's live-demo field.
 - [ ] (owner) **7. builder.aws.com blog post** *(bonus)* — title **must contain "Agents for
       Humans"**. Draft is written → [`BLOG_DRAFT.md`](BLOG_DRAFT.md) (title: *"You Approve
       Decisions, Not Links — Building EverLink for the 'Agents for Humans' Hackathon"*);
@@ -67,7 +75,7 @@ click submit on Devpost). Those stay open by design and are the last mile.
 | Criterion | Where we score it | Status |
 |---|---|---|
 | Technological Implementation | Strands multi-agent (Orchestrator→Scanner→Judge→Writer), Hooks (audit + write gate), Evals (50-case), Bedrock Claude, OpenTelemetry tracing; AgentCore documented as stretch | [x] |
-| Design | Decision Board UX (Next.js), Structured-Output `Proposal` cards, two-track Interrupt approval flow | [x] |
+| Design | Decision Board UX (Next.js): public landing + `/how-it-works` primer, filterable `/inbox` (`?status=`), evidence-chain card detail, navigable audit trail (`?event=`), weekly `/report`; Structured-Output `Proposal` cards; two-track Interrupt approval flow | [x] |
 | Potential Impact | `verify_fix` re-probe + snapshot rollback closes the loop on real production links (23,476-slot Phase A dataset) | [x] |
 | Creativity & Originality | 4 Steering policies (Disclosure / Editorial / Scope / Write) | [x] |
 | Presentation | ≤5min video, storyboard, live demo, blog | [ ] (owner) — artifacts drafted; recording/publish pending |
@@ -88,7 +96,10 @@ click submit on Devpost). Those stay open by design and are the last mile.
 ---
 
 **Bottom line.** Every engineering deliverable through Phase **G** is implemented,
-tested (**254** passing tests), committed, and pushed. The secrets zero-leak audit
-**passes**. What remains is the human last mile: AWS Builder ID, flipping the repo
-public, recording the demo video, deploying the live board, publishing the blog, and
-clicking submit on Devpost — each with its draft/artifact already prepared.
+tested (**311** passing tests — `pytest -q` re-run 2026-09-05: 311 passed in 84.8s, fully
+offline), committed, and pushed, and the **live board is deployed**
+(https://everlink-seven.vercel.app, read-only). The secrets zero-leak audit **passes**.
+What remains is the human last mile: AWS Builder ID, flipping the repo public, recording the
+demo video (rehearsed end-to-end — press record and replay [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md)),
+publishing the blog, and clicking submit on Devpost — each with its draft/artifact already
+prepared.

@@ -10,15 +10,16 @@ keep it under 5:00 (spec §9).
 > sensitive value on screen — DB hosts, URLs with tokens, `.env` (SUBMISSION_CHECKLIST §8).
 
 **Honesty labels used below** (keep them visible on screen or in voiceover):
-- **[REAL]** — deterministic detection code or a live Bedrock Claude call, no fakery.
+- **[REAL]** — deterministic detection code or a live Amazon Bedrock model call, no fakery.
 - **[SEEDED REPLAY]** — the injected demo dataset (`scripts/seed_demo.py`, 41 problem
   slots + approve/reject samples + audit trail). Pre-computed, and labelled as replay
   on screen per spec §4.1 / §7.
 - **[EST.]** — an estimate, not a measured figure.
 
 Cast: one operator (the author). Environment: terminal + Decision Board (Next.js) +
-email/Telegram. Judge backend for the live shots: `--judge bedrock` (real Claude);
-the seeded card shots are replay.
+email/Telegram. Judge backend for the live shots: `--judge mantle` — a **real LLM on Amazon
+Bedrock** (qwen through AWS's Bedrock Mantle gateway), rehearsed locally on 2026-09-05 at
+39s for `--limit 6`; the seeded card shots are replay.
 
 ---
 
@@ -60,16 +61,17 @@ last full manual check: never
 
 ## Shot 3 — 1:00–1:35 · The nightly run · **Technological Implementation**
 
-**On screen:** terminal. `python scripts/nightly.py` (or `python -m everlink scan --site
-aethelgem --judge bedrock`). Three agent logs interleave — Scanner → Judge → Writer —
-under one Orchestrator. Then the morning brief lands in email / Telegram. Cut to the
-Board showing the seeded problem queue.
+**On screen:** terminal. `python -m everlink scan --site aethelgem --judge mantle --dry-run
+--limit 6` (start it at 0:38 — measured 39s, so the report lands around 1:17), then
+`python -m everlink notify --brief --dry-run` (~2s, the morning brief with 16 cards and its
+"nothing sent" honesty line). Cut to the Board's `/inbox` showing the problem queue. Both
+`--dry-run` honesty lines stay in frame.
 
 **Voiceover:**
 > "Every night a cron kicks off the loop. A **Scanner** agent extracts each link slot and
 > probes it — L1 HTTP status and redirect-chain analysis, then an L2 stealthy page parse
-> only where L1 is inconclusive. A **Judge** agent — Claude on Bedrock — decides the fix
-> and emits a structured `Proposal`. **[REAL]** The detection is deterministic code; the
+> only where L1 is inconclusive. A **Judge** agent — a real LLM on Amazon Bedrock — decides
+> the fix and emits a structured `Proposal`. **[REAL]** The detection is deterministic code; the
 > judgment is a live model call. Anything blocked or timed out is flagged
 > `needs_human_recheck` — the agent knows its limits and never fabricates a result. By
 > morning, **16 problem slots** are waiting **[live nightly proposals + seeded replay
@@ -86,12 +88,13 @@ retires share the same list, each with its reason on record. Zoom a rejection ca
 its typed reason.
 
 **Voiceover:**
-> "The only screen I open is a minimal approval inbox. Low-risk fixes are batched — I
-> approve **38** in one click. **[SEEDED REPLAY]** The risky ones I read individually: here
-> I reject three, and I type *why* — the agent remembers that reason and won't re-propose
-> the same thing next week. And because the same dead product appears in two articles,
-> EverLink merges them into **one** decision card, so I decide once, not twice. You approve
-> **decisions**, not links."
+> "The only screen I open is a minimal approval inbox. Low-risk fixes are batched — **37**
+> applied and verified so far. **[SEEDED REPLAY]** The risky ones I read individually: the
+> four I rejected by hand each carry a typed *why*, and the false positives the nightly
+> recheck retired sit in the same list, reasoned too — the agent remembers that reason and
+> won't re-propose the same thing next week. And because the same dead product appears in
+> two articles, EverLink merges them into **one** decision card, so I decide once, not
+> twice. You approve **decisions**, not links."
 
 ---
 
@@ -149,23 +152,26 @@ Optionally `--trace console` to flash the OpenTelemetry span tree.
 > deleted, a reference link is never blindly replaced, and duplicates always merge to one
 > card. The oracle is proven non-vacuous by a test that injects a rule-breaking Judge and
 > asserts the evaluators catch it. **[REAL — stub backend: detection is real deterministic
-> code; the live Claude Judge is scored with the same harness via `--judge bedrock`.]**"
+> code; the live Judge (qwen on Amazon Bedrock via the Mantle gateway) is scored with the
+> same harness via `--judge mantle`.]**"
 
 ---
 
 ## Shot 8 — 4:10–4:40 · The generic adapter + live demo · **Impact / Design**
 
-**On screen:** point EverLink's `generic` read-only adapter at an arbitrary well-known
-blog (`--site generic --include-internal`), produce a dead-link report for a site EverLink
-has never seen. Then click the **live demo link** (Vercel board, seeded so the inbox is
-never empty).
+**On screen:** point EverLink's `generic` read-only adapter at an arbitrary well-known blog
+— rehearsed command: `python -m everlink scan --site https://blog.python.org
+--include-internal --dry-run --limit 8` (~10s, 8/8 healthy) — then navigate the **live
+demo**: https://everlink-seven.vercel.app landing page → `/inbox` (seeded so the queue is
+never empty) → `/how-it-works` (the public primer: brand panel, repo link, contact).
 
 **Voiceover:**
 > "This isn't hard-coded to my sites. A `generic` adapter will scan **any** blog — read-only
 > — and hand back a link-rot report. Here it is on a site EverLink has never seen. And
 > here's the live board, seeded so there's always something real to look at. The public
 > intro page ships with it — open source, self-hosted, repo and contact in the footer.
-> **[live URL if deployed; otherwise show the local board and say so honestly.]**"
+> **[deployed: https://everlink-seven.vercel.app, served read-only — approve/reject is
+> disabled on the public deployment so no visitor can trigger a real write.]**"
 
 ---
 

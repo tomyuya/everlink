@@ -33,7 +33,7 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 | `/how-it-works` | **How it works** — static, read-only product primer: open-source/self-hosted positioning, the two-database model, and the deployer contract. Renders with no DB configured. |
 | `/inbox` | **Inbox** — the working queue: filterable card list (pending/approved/applied/rejected/all) with multi-select + **batch approve/reject**; `?status=` deep-links each filter tab. |
 | `/decision/[id]` | **Card detail** — the proposal, its rationale, and the full **evidence chain** (slot → L1 HTTP probe → redirect chain → L2 verdict → final verdict), plus single-card approve/reject. |
-| `/audit` | **Audit trail** — the append-only `audit_log`, newest first. |
+| `/audit` | **Audit trail** — the append-only `audit_log`, newest first. `?event=<type>` filters to one event type (e.g. `?event=steering_cancel`, `write`, `verify`, `rollback`, `dead_letter`) with a filter chip showing the row count and a *clear filter* link — the log outgrows the page window once nightly `tool_result` traffic piles up. |
 | `/report` | **Weekly report** — live aggregates (links healed, slots fixed, decisions by status/action, audit events) over a 7/14/30-day window. pe3's scheduled digest reports these same numbers. |
 
 ## API routes

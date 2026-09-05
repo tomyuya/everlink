@@ -57,7 +57,10 @@ EverLink is an autonomous link *steward*, not another reporter. Every night:
 5. **It executes and verifies.** Approved fixes are written back — snapshot first, single
    transaction — then `verify_fix` **re-probes the new link** to confirm it's genuinely
    alive. If it isn't, the writer rolls back and dead-letters the decision.
-6. **It reports.** A weekly digest plus a full audit log of every tool call.
+6. **It reports.** A weekly digest plus a full audit log of every tool call — and the log is
+   *navigable*: `/audit?event=steering_cancel` (or `write` / `verify` / `rollback` /
+   `dead_letter`) filters straight to the rows behind any claim made here, instead of
+   leaving them buried under ~1,900 nightly events.
 
 **Who it's for:** independent publishers, affiliate creators, and small content teams —
 one to three people running several sites. The first user is me (dogfooding on real
@@ -93,14 +96,20 @@ production data).
   which bypasses the account-level Anthropic allowlist gate that blocks direct SigV4
   Claude), and the same seam accepts `BedrockModel` / Anthropic / OpenAI / Gemini /
   Mistral / Ollama / LiteLLM / SageMaker providers or a `ModelRouter` failover. The entire
-  254-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
+  311-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
   proof of provider-independence.
 - **OpenTelemetry** — optional tracing renders a run as one span tree (`run → {detect,
   judge, score}`), with Strands' own model/tool spans nested under the judge.
-- **Deploy** — Next.js board on Vercel, Neon Postgres store, nightly cron on Railway
-  (AgentCore runtime as the stretch path). Source-site DB access is strictly read-only, and
-  a write guardrail (`db._assert_writable`) refuses any DSN matching a source-site or
-  deny-list host, so the production instance can never be written even by accident.
+- **Deploy** — Next.js board on Vercel (**live:** https://everlink-seven.vercel.app), Neon
+  Postgres store, nightly cron on Railway (AgentCore runtime as the stretch path). The board
+  opens on a public landing page and a static **`/how-it-works`** primer — open-source /
+  self-hosted positioning, the two-database model, and the deployer contract, rendered with
+  no DB configured, so a reviewer can read what EverLink *is* before touching any data. The
+  public deployment runs with `NEXT_PUBLIC_BOARD_READONLY=1`: decision writes are refused
+  with `403`, so an anonymous visitor can never approve a fix that the nightly worker would
+  then apply to live content. Source-site DB access is strictly read-only, and a write
+  guardrail (`db._assert_writable`) refuses any DSN matching a source-site or deny-list host,
+  so the production instance can never be written even by accident.
 
 ### Challenges we ran into
 
@@ -126,7 +135,7 @@ production data).
   prove the oracle isn't vacuous.
 - The **closed loop**: `verify_fix` re-probes after every write and rolls back on failure.
   On the seeded demo night, 37 dead links verify back to zero — and I show a rollback too.
-- **254 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
+- **311 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
   EverLink has never seen; a seeded live board so a judge never opens an empty inbox.
 - Six Mermaid **architecture diagrams** rendered natively on GitHub, and a secrets-clean
   repo (only `.env.example`, placeholders, gitignored data snapshots).
@@ -170,6 +179,11 @@ the inbox stays deliberately minimal — one screen, not a suite.
 - **Repo:** https://github.com/tomyuya/everlink (public, MIT)
 - **Architecture Diagram:** `ARCHITECTURE.md` in the repo (also uploaded to Devpost's
   separate diagram field)
-- **Live demo:** *(owner: Vercel board URL once deployed)*
-- **Demo video:** *(owner: ≤ 5:00, from `DEMO_SCRIPT.md`)*
+- **Live demo:** https://everlink-seven.vercel.app — read-only public deployment
+  (`NEXT_PUBLIC_BOARD_READONLY=1`, decision writes refused with `403`). Reviewer path:
+  `/how-it-works` → `/inbox` (16 pending) → `/inbox?status=rejected` (69, every one carrying
+  a reason) → `/audit?event=steering_cancel` (3 rows, filter chip) → `/report` (37 healed).
+- **Demo video:** *(owner: ≤ 5:00 — shot list and second-by-second cues in
+  [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md), narration in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md);
+  both rehearsed end-to-end against the live board on 2026-09-05)*
 - **Blog:** *(owner: builder.aws.com URL once published, from `BLOG_DRAFT.md`)*

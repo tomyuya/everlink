@@ -3,13 +3,16 @@
 录制执行单：秒级字幕 cue（英）+ 中文对照 + 画面动作。配对文件：[DEMO_SCRIPT.md](DEMO_SCRIPT.md)（完整旁白稿）。
 **录屏 = owner 动作**。工具：Xbox Game Bar（Win+G）或 OBS，1080p，导出 mp4 → YouTube **Unlisted** → 链接填 Devpost video 字段。
 
-## 录前检查（5 分钟，2026-09-04 演练定稿）
+## 录前检查（5 分钟，2026-09-05 复演定稿）
 
 1. **代理必须先活**：v2rayN（`D:\d36j0t1v\v2rayN\v2rayN.exe`）必须已启动且连上节点；验证 `python d:\qcoder\_proxy_check.py` 输出 `LISTENING`。**刚启动后节点需热身**——第一次导航 vercel.app 可能超时，重试即通。
-2. **board 用生产地址** `https://everlink-seven.vercel.app`（禁 localhost）；录前导航一次首页确认 `Inbox · EverLink Board` 标题出现。
-3. **Judge 模式定档**：生产 mantle 已跑绿（2026-09-04 nightly：3 站 ×25，真实 qwen proposals）→ 默认 `--judge mantle` 录 Shot 3/7，字幕用 **[REAL]**（真实 LLM 调用）；直连 Claude 工单若批了可选 `--judge bedrock`；两者当晚都不可用才退回 `--judge stub` + 文末 **ALT cue**（诚实优先，不许嘴替）。
+2. **board 用生产地址** `https://everlink-seven.vercel.app`（禁 localhost）。**收件箱在 `/inbox`**（`/` 已是品牌落地页，不含卡片），录前导航一次 `/inbox` 确认 `Inbox · EverLink Board` 标题与 16 张 pending 卡出现。
+   **录前预热**：把下方 URL 清单里的 board 地址逐个先导航一遍——Vercel 冷启动首航会报 10s 超时（其实内容已渲染），预热后录制时才秒开。
+   **只读部署（09-05 起）**：生产 board 已设 `NEXT_PUBLIC_BOARD_READONLY=1`——`/inbox` 的勾选框与批量条、卡片上的 approve/reject 按钮统一换成 `Read-only view — decisions are disabled on this deployment.` 提示行，API 写操作返回 403。理由：匿名评委若点了 approve，下一次 Railway nightly 的 worker 会真去改 AethelGem 线上内容；只读同时也把 Shot 4"只展示已落库结果、不现场点击"的口径变成平台强制。**画面影响**：Shot 4 三屏（`/inbox` 与两个 `?status=` 视图）不再有批量条，改为只读提示行，卡片本身与计数不变。
+3. **Judge 模式定档（2026-09-05 本地实测通过）**：默认 `--judge mantle` 录 Shot 3，字幕用 **[REAL]**（真实 LLM 调用，qwen via Bedrock Mantle 网关）。本地 `--limit 6` 实测 **39s / rc=0**，结构可复现（同 slot、同 `REWRITE_SENTENCE`、5 healthy + 1 offer_changed、steering 0 blocked、2 tool calls、1 决策卡），措辞每次不同属正常。
+   **本地 mint 前置条件**：走 `~/.aws/credentials` 的 `[default]`；`.env` 里**绝不能有空值的 `AWS_ACCESS_KEY_ID=` / `AWS_SECRET_ACCESS_KEY=` / `AWS_PROFILE=` 行**——空串会遮蔽共享凭据文件，mint 直接报 `Failed to mint Bedrock Mantle bearer token`（09-05 已把这三行注释掉；`.env` 若重建须复查）。备选路径：`BEDROCK_MANTLE_API_KEY`（console 铸的 key，直作 OpenAI api_key）。直连 Claude 工单若批了可选 `--judge bedrock`；当晚都不可用才退回 `--judge stub` + 文末 **ALT cue**（诚实优先，不许嘴替）。
 4. **数字复核（以屏幕实况为准，2026-09-05 复探）**：23,476（`data/slots_summary.json` 未变）；board 实况 **pending 16 / applied 37 / rejected 69 / healed 37**——69 条 rejected = 4 人工typed驳回 + 54 条 nightly recheck 误报退役 + 11 条 09-05 系统去重驳回，全部带理由落库；audit 全量 **steering_cancel 3 / write 38 / verify 38 / rollback 1 / dead_letter 1**（事件名是 write/verify，不存在 apply）；evals cards 41（fixture 语境）。`[REAL]`/`[SEEDED REPLAY]`/`[EST.]` 角标照 DEMO_SCRIPT 三标签执行。
-5. **遮敏**：DB host、带 token 的 URL、`.env`、scan 输出里的联盟 tag（`tag=aethelgem2026-20`）blur/裁掉。
+5. **遮敏**：DB host、带 token 的 URL、`.env`、scan 输出里的联盟 tag（`tag=aethelgem2026-20`）blur/裁掉；board 卡片 Evidence 区块里的联盟 tag 同样要遮（如 `dec-b21f3d82bc` 的新/旧 URL 带 `tag=sandcart-20`）。
 6. 字幕烧录或后期贴：每条 cue ≤ 2 行；角标标签与字幕同时出现。
 7. **录屏范围**：全屏，须同时罩住 **IDE 终端面板**（终端镜头）与 **IDE 内置 Browser view 面板**（board/外站镜头）；IDE 最大化，无关窗口移出。Browser view 若关闭，我 navigate 即唤醒（演练已验证）。
 
@@ -17,7 +20,7 @@
 
 ## Shot 1 · 0:00–0:30 · 冷开场：真问题
 
-画面：字卡 `#stats`（file:///d:/qcoder/_demo_cards.html#stats）→ **www.aethelgem.com**（实测 1.5–3s 载完）→ **hotdeals.today**（导航工具会报超时但页面 ~12s 渲染成功，留足 15s）。第三站 **flashdeals.today**（内部代号 sandcart，即 FlashDeals dropshipping 独立站；首页实测 HTTP 200 可达）为保持节奏不做实时导航，"三站"叙事由 board 的站点徽章与 scan 报告补足。**注意：不存在 sandcart.com 这个域名**（旧稿误写，已废弃）。
+画面：字卡 `#stats`（file:///d:/qcoder/_demo_cards.html#stats）→ **www.aethelgem.com**（实测 1.5–3s 载完）→ **hotdeals.today**（09-05 预热后 **2.9s** 载完；09-04 的 ~12s 是节点热身，导航工具报超时但页面其实已渲染——仍留足 15s）。第三站 **flashdeals.today**（内部代号 sandcart，即 FlashDeals dropshipping 独立站；首页实测 HTTP 200 可达）为保持节奏不做实时导航，"三站"叙事由 board 的站点徽章与 scan 报告补足。**注意：不存在 sandcart.com 这个域名**（旧稿误写，已废弃）。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -29,7 +32,7 @@
 
 ## Shot 2 · 0:30–1:00 · 三问：problem / who / why
 
-画面：三张标题卡 PROBLEM · WHO · WHY（或人对镜头）。
+画面：三张标题卡 PROBLEM · WHO · WHY（或人对镜头）。**0:38 在 IDE 终端敲入 Shot 3 的 scan 命令并回车**——实测 39s，1:17 前后 report 定格，正好接上 Shot 3 的画面节奏。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -40,7 +43,7 @@
 
 ## Shot 3 · 1:00–1:35 · 夜间运行 [REAL/SEEDED]
 
-画面：IDE 终端 `python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6`（后台跑，首条日志 ~5s 内出现，流式拍 20–25s 即切走；全量跑完 ~2min，Amazon captcha→ESCALATE 证据链真实滚动）→ `python -m everlink notify --brief --dry-run`（~2s，35 pending 晨报 + "nothing sent" 诚实行）→ 切 Browser view：**生产 board 首页**。结尾诚实行 "--dry-run: nothing written to any database" 若在画面内**保留**。
+画面：scan 已于 0:38 启动（`python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6`，09-05 mantle 实测 **39s**：`[1/2] discovering + detecting...` 立刻出现，1:17 前后 report 定格——6 扫 / 5 healthy + 1 offer_changed / 真实 qwen 的 `REWRITE_SENTENCE` 提案与理由滚动 / steering 0 blocked / 1 决策卡）→ 1:17–1:20 `python -m everlink notify --brief --dry-run`（~2s，**16 pending** 晨报 + "nothing sent" 诚实行）→ 1:20 起切 Browser view：**生产 board `/inbox`**（16 张 pending 卡）。两句诚实行（`--dry-run: nothing written to any database` / `nothing sent`）在画面内**保留**。万一 scan 到 1:20 仍未定格，直接切 board——终端里仍在滚动的真实调用本身就是 [REAL] 证据。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -52,7 +55,7 @@
 
 ## Shot 4 · 1:35–2:15 · 决策收件箱 [SEEDED]
 
-画面（全 URL 导航，零点击）：`/`（pending 35 张）→ `/?status=applied`（37 张已批准）→ `/?status=rejected`（4 张）→ 打开 **`/decision/dec-7158d74e33`**（Rewrite sentence 被驳回：价格 $199→$349、"under $200" 表述过期，驳回理由已落库）→ 返回 rejected 列表停。**线上只读，不现场点击 approve/reject——展示已落库结果。**
+画面（全 URL 导航，零点击）：`/inbox`（pending **16** 张）→ `/inbox?status=applied`（**37** 张已批准）→ `/inbox?status=rejected`（**69** 张 = 4 人工 typed 驳回 + 54 recheck 误报退役 + 11 系统去重，全部带理由落库）→ 打开 **`/decision/dec-7158d74e33`**（Rewrite sentence 被驳回：价格 $199→$349、"under $200" 表述过期，驳回理由已落库）→ 返回 rejected 列表停。**线上只读，不现场点击 approve/reject——展示已落库结果。**
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -100,7 +103,7 @@
 
 ## Shot 8 · 4:10–4:40 · 通用适配器 + live demo
 
-画面：IDE 终端 `python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`（实测 ~10s：8/8 healthy + dry-run 诚实行）→ 切 Browser view：生产 board 首页（Vercel）→ **`/how-it-works`**（公开介绍页：品牌面板 logo 链仓库、页脚 GitHub + 联系邮箱；09-05 新增镜头）。
+画面：IDE 终端 `python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`（09-05 复演 ~10s：8/8 healthy + dry-run 诚实行）→ 切 Browser view：生产 board **落地页 `/`**（品牌 hero 面板："EverLink · the autonomous link-rot steward"，09-05 新增）→ **`/inbox`**（种子数据保证总有真东西可看）→ **`/how-it-works`**（公开介绍页：品牌面板 logo 链仓库、页脚 GitHub + 联系邮箱；09-05 新增镜头）。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -124,20 +127,21 @@
 ## 命令小抄（终端镜头，在 IDE 终端面板跑；节奏用 sleep 控制）
 
 ```
-Shot 3:  python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6   (后台跑，拍 20-25s 流式；mantle=真实 qwen)
-         python -m everlink notify --brief --dry-run                                  (~2s)
-Shot 7:  python scripts/run_evals.py --full --trace console                           (~22s)
+Shot 3:  python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6   (0:38 敲回车；09-05 实测 39s，真实 qwen)
+         python -m everlink notify --brief --dry-run                                  (~2s，16 pending)
+Shot 7:  python scripts/run_evals.py --full --trace console                           (~19-22s)
 Shot 8:  python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8   (~10s)
 ```
 
 工作目录：`d:\qcoder\everlink`。
 
-## Board URL 清单（生产，全部 2026-09-04 演练验证 200/渲染 OK）
+## Board URL 清单（生产，2026-09-05 复演逐条 Browser DOM 验证渲染 OK）
 
 ```
-S3/S8 首页   https://everlink-seven.vercel.app/
-S4  applied  https://everlink-seven.vercel.app/?status=applied
-S4  rejected https://everlink-seven.vercel.app/?status=rejected
+S8  落地页   https://everlink-seven.vercel.app/                      (品牌 hero："the autonomous link-rot steward")
+S3/S4/S8 收件箱 https://everlink-seven.vercel.app/inbox               (16 张 pending)
+S4  applied  https://everlink-seven.vercel.app/inbox?status=applied   (37 张)
+S4  rejected https://everlink-seven.vercel.app/inbox?status=rejected  (69 张)
 S4  驳回卡   https://everlink-seven.vercel.app/decision/dec-7158d74e33
 S5  audit过滤 https://everlink-seven.vercel.app/audit?event=steering_cancel   (3 行+过滤条)
 S5  披露卡   https://everlink-seven.vercel.app/decision/dec-2b91672858        (Rejected·typed 理由确认不写)
@@ -147,7 +151,7 @@ S6  rollback对 https://everlink-seven.vercel.app/audit?event=rollback · ?event
 S6  report   https://everlink-seven.vercel.app/report         (Links healed 37)
 S8  介绍页   https://everlink-seven.vercel.app/how-it-works   (品牌面板+页脚链接，09-05 新增)
 字卡        file:///d:/qcoder/_demo_cards.html#stats · #cards · #end
-外站        https://www.aethelgem.com (1.5-3s) · https://hotdeals.today (~12s，nav 报超时属正常)
+外站        https://www.aethelgem.com (1.5-3s) · https://hotdeals.today (预热后 2.9s；冷启动 nav 可能报超时但页面会渲染，留 15s)
 第三站      flashdeals.today（内部代号 sandcart = FlashDeals 独立站，HTTP 200 可达，演示不做实时导航）· 无 sandcart.com 域名
 ```
 
@@ -158,12 +162,27 @@ S8  介绍页   https://everlink-seven.vercel.app/how-it-works   (品牌面板+�
 | v2rayN 拉起 | `python d:\qcoder\_start_proxy.py`（自动启动+等端口，实测 PROXY UP） |
 | 生产 board 连通 | 强制代理探测 200/2.3s；Browser view 导航+渲染 OK（visible 905×961，35 卡） |
 | 8 个 board URL | 全部 200 且内容标记验证通过（rejected/rewrite/$349、escalate/stub、applied/replace、steering_cancel×3、verify×84、healed 37） |
-| scan --limit 6 dry-run | 09-04 演练用 stub：~2min 全量；6×Amazon captcha→ESCALATE_HUMAN 诚实；steering 0 blocked/6 audited。**正式录制改用 `--judge mantle`（生产已验证真实 qwen），录前需重演练一次 mantle 计时** |
+| scan --limit 6 dry-run | 09-04 演练用 stub：~2min 全量；6×Amazon captcha→ESCALATE_HUMAN 诚实；steering 0 blocked/6 audited。**已于 09-05 用 `--judge mantle` 重演通过（39s），见下节** |
 | notify --brief dry-run | ~2s；35 pending 全 high escalate；"nothing sent" |
 | evals --full --trace | 22s；OVERALL PASS（50/50、0、三项 100%、cards 41） |
 | generic blog.python.org | ~10s；8/8 healthy + dry-run 行 |
 | 字卡三页 | file:// 渲染 OK（#stats/#cards/#end） |
 | 已知坑 | Qoder 崩溃会带走 Browser view（navigate 唤醒）与代理（_start_proxy.py 拉起）；节点刚起时 vercel.app 首航超时须重试；hotdeals 导航工具超时但页面会渲染；audit 事件名是 write/verify/rollback/dead_letter（**不存在 apply**）；列表页（/、applied、rejected）为客户端渲染，httpx 探针只见空壳，画面内容以 Browser DOM 核验；cmd 单个 `&` 是异步执行，别误判同步完成 |
+
+## 演练记录（2026-09-05 复演，全 9 Shot 逐拍 verified）
+
+| 项 | 结果 |
+|---|---|
+| 字卡三页 | `#stats` / `#cards` / `#end` file:// 渲染 OK（23,476 与 `data/slots_summary.json` 一致，未改） |
+| 外站 | aethelgem 200 正常；hotdeals.today 本次 **2.9s、无超时**（09-04 的 ~12s 是节点热身，预热后消失） |
+| board 19 拍 | `/` 落地页 hero、`/inbox`(16)、`?status=applied`(37)、`?status=rejected`(69 + 目标驳回卡)、`dec-7158d74e33`（含新页脚链接）、`/audit?event=steering_cancel`（过滤条 + 3 行）、`dec-2b91672858`、`dec-b21f3d82bc`、`?event=write`(38)、`?event=verify`(38)、`?event=rollback`(1)、`?event=dead_letter`(1)、`/report`(37/37)、`/how-it-works`（mark 链 + GitHub + mailto 三标记 true）——全部通过 |
+| scan `--judge mantle` | **修复后通过**：39s / rc=0 / 6 扫 → 5 healthy + 1 offer_changed / 真实 qwen `REWRITE_SENTENCE`（risk=high）提案与理由 / steering 0 blocked / 2 tool calls / 1 卡 / dry-run 零写入。连跑两次结构完全一致，仅措辞不同（[REAL] 预期行为） |
+| notify `--brief` | ~2s；18 slots / 16 cards / 晨报含 inbox URL / "nothing sent"（`.env` 补第 39 行 `EVERLINK_BOARD_URL` 后不再出现 "(not set)" 丑括号） |
+| evals `--full --trace` | 19s；OVERALL PASS（cards 41） |
+| generic blog.python.org | 8/8 healthy + dry-run 行 |
+| 新发现并已修的坑 | ① `.env` 里空值 `AWS_*` 行遮蔽 `~/.aws/credentials` → mantle mint 失败（已注释三行，B/C 两路实测 mint 0.9–1.1s OK，无需代理）；② board 列表页迁到 `/inbox`，`/` 变落地页（URL 清单已改）；③ Vercel 冷启动首航报 10s 超时但 `readyState=complete`、内容齐全 → **录前预热全部 URL**；④ `pip install` 参数带引号会被原样传参报错（用 `pip install strands-agents[openai]==1.54.0` 不加引号） |
+
+## 录制口径
 
 所有 `--dry-run`：零写库、零发送；屏幕上的诚实行（"nothing written to any database" / "nothing sent"）是加分画面，**不要剪掉**。
 

@@ -12,6 +12,17 @@ compact decision card **only when a human judgment is actually needed**.
 > Built for the **AWS "Agents for Humans" Hackathon** (Professional Agents track) with
 > the **Strands Agents SDK** and **Amazon Bedrock**.
 
+> **Live demo (read-only):** <https://everlink-seven.vercel.app> — the maintainer's own
+> deployment, carrying the real nightly patrol output for his three sites (plus labelled
+> seeded-replay cards, so the queue is never empty for a reviewer). Suggested path: the
+> landing page → **`/how-it-works`** (product primer) → **`/inbox`** (decision queue,
+> `?status=` filters) → a card's evidence chain → **`/audit?event=steering_cancel`** (the
+> guardrail firing — one filter away from ~1,900 rows of nightly traffic, where those 3
+> rows would otherwise be buried) → **`/report`**.
+> It is served with `NEXT_PUBLIC_BOARD_READONLY=1`, so approve/reject is disabled on the
+> public deployment — the approval flow is demonstrated in the video instead. Your own
+> deployment leaves that flag off and decides for real.
+
 **It is not a SaaS.** No sign-up, no hosting, no monthly fee, no multi-tenancy — just code
 you run on your own server. The three sites that appear in this repo (**AethelGem /
 HotDeals / FlashDeals**) are only the **maintainer's dogfooding examples** (the first user
@@ -172,7 +183,7 @@ Three providers ship in-repo:
 |---|---|---|
 | `llm.get_mantle_model()` → `OpenAIModel` | **real LLM (qwen) via the Bedrock Mantle gateway** (`bedrock-mantle.<region>.api.aws`) — the **deployed production judge** | `--judge mantle`, the live nightly (verified green 2026-09-04: 3 sites × 25 slots, real proposals) |
 | `llm.get_model()` → `BedrockModel` | real Claude via Amazon Bedrock (direct SigV4) | `verify_bedrock.py`, `--judge bedrock`, once the account's Anthropic allowlist gate clears |
-| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 254-test suite, all offline Evals, `--dry-run` — **no longer** the production judge |
+| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 311-test suite, all offline Evals, `--dry-run` — **no longer** the production judge |
 
 **The swap experiment.** Because the seam is one injected `Model`, changing provider is a
 one-line change with no pipeline edit:
@@ -225,7 +236,7 @@ emits real structured proposals (REWRITE_SENTENCE / DROP_BLOCK / ESCALATE) whose
 refuses to fabricate replacement URLs. `StubModel` stays first-class for the offline
 test/eval suite, but is **no longer** what runs in production.
 
-**Offline proof of provider-independence:** the entire 254-test suite *and* the 50-case
+**Offline proof of provider-independence:** the entire 311-test suite *and* the 50-case
 Evals run on the injected `StubModel`, so the orchestration, steering, hooks, queue, and
 card merge are exercised with no cloud dependency. `scripts/verify_bedrock.py` is the one
 operator step that swaps in real Claude and confirms a live call (creds → model → real
