@@ -35,8 +35,27 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Nav />
           <main className="mx-auto w-full max-w-6xl px-4 py-8">{children}</main>
           <footer className="mx-auto w-full max-w-6xl px-4 pb-10 text-xs text-zinc-400 dark:text-zinc-600">
-            EverLink · autonomous link-rot steward on AWS Strands + Bedrock · humans approve
-            only the risky fixes.
+            <p>
+              EverLink · autonomous link-rot steward on AWS Strands + Bedrock · humans approve
+              only the risky fixes.
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <a
+                href="https://github.com/tomyuya/everlink"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-700 dark:text-zinc-500 dark:decoration-zinc-700 dark:hover:text-zinc-300"
+              >
+                github.com/tomyuya/everlink
+              </a>
+              <span aria-hidden="true">·</span>
+              <a
+                href="mailto:prime.zhang@gmail.com"
+                className="font-medium text-zinc-500 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-700 dark:text-zinc-500 dark:decoration-zinc-700 dark:hover:text-zinc-300"
+              >
+                prime.zhang@gmail.com
+              </a>
+            </p>
           </footer>
         </ThemeProvider>
       </body>
