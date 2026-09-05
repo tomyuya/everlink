@@ -23,10 +23,12 @@ click submit on Devpost). Those stay open by design and are the last mile.
 - [x] **3. Architecture Diagram** — [`ARCHITECTURE.md`](ARCHITECTURE.md), 6 Mermaid views
       rendered natively by GitHub (pg1 · `de01ec1`).
       - [ ] (owner) also upload it to Devpost's *separate* "Architecture Diagram" field.
-- [ ] (owner) **4. Demo video ≤ 5:00** — pitch covers **problem / who / why** (spec §11
-      storyboard). Narration → [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md); second-by-second shot list,
+- [ ] (owner) **4. Demo video ≤ 5:00** — three-act pitch: intro (positioning / scale /
+      problem / who / why / principle / resources title cards) → how to use it
+      (`/how-it-works`) → live demo (spec §11 storyboard, re-cut 2026-09-05). Narration →
+      [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md); second-by-second shot list,
       live URLs, measured timings and the pre-record checklist →
-      [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md). All 9 shots were rehearsed end-to-end against
+      [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md). All 15 shots were rehearsed end-to-end against
       the live board on **2026-09-05** (real mantle judge, 39s; every board URL DOM-verified),
       so recording is a straight replay of that rehearsal — pressing record is the only owner
       step left.

@@ -186,7 +186,9 @@ the inbox stays deliberately minimal — one screen, not a suite.
   (`NEXT_PUBLIC_BOARD_READONLY=1`, decision writes refused with `403`). Reviewer path:
   `/how-it-works` → `/inbox` (16 pending) → `/inbox?status=rejected` (69, every one carrying
   a reason) → `/audit?event=steering_cancel` (3 rows, filter chip) → `/report` (37 healed).
-- **Demo video:** *(owner: ≤ 5:00 — shot list and second-by-second cues in
+- **Demo video:** *(owner: ≤ 5:00, three acts — intro title cards (positioning, principle,
+  resources), a how-to-use pass over `/how-it-works`, then the live demo; shot list and
+  second-by-second cues in
   [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md), narration in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md);
   both rehearsed end-to-end against the live board on 2026-09-05)*
 - **Blog:** *(owner: builder.aws.com URL once published, from `BLOG_DRAFT.md`)*
