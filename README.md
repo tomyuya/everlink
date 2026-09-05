@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="board/public/everlink-mark.svg" alt="EverLink logo" width="120" />
+</p>
+
 # EverLink
 
 **An open-source (MIT), self-hosted link-rot patrol agent.** You clone the code, deploy

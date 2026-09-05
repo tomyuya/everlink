@@ -39,29 +39,59 @@ export default function HowItWorksPage() {
 /** One-glance positioning: open-source, self-hosted, NOT a SaaS. */
 function Positioning() {
   return (
-    <section className="space-y-3">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-        How EverLink works
-      </h1>
-      <p className="max-w-prose text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-        EverLink is an{" "}
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">
-          open-source, self-hosted
-        </span>{" "}
-        agent that patrols the outbound links of <em>your</em> sites every night,
-        detects link rot, repairs what it safely can, and surfaces a decision card
-        only when a fix needs a human. You clone the code, deploy it on your own
-        infrastructure, and fill in your own config.
-      </p>
-      <div className="flex flex-wrap gap-2 text-xs">
-        <Badge icon={<Boxes className="h-3.5 w-3.5" />} label="Open source · MIT" />
-        <Badge icon={<Server className="h-3.5 w-3.5" />} label="Self-hosted" />
-        <Badge
-          icon={<ShieldCheck className="h-3.5 w-3.5" />}
-          label="Not a SaaS · no signup, no billing"
-        />
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-stretch">
+      <div className="space-y-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+          How EverLink works
+        </h1>
+        <p className="max-w-prose text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
+          EverLink is an{" "}
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+            open-source, self-hosted
+          </span>{" "}
+          agent that patrols the outbound links of <em>your</em> sites every night,
+          detects link rot, repairs what it safely can, and surfaces a decision card
+          only when a fix needs a human. You clone the code, deploy it on your own
+          infrastructure, and fill in your own config.
+        </p>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Badge icon={<Boxes className="h-3.5 w-3.5" />} label="Open source · MIT" />
+          <Badge icon={<Server className="h-3.5 w-3.5" />} label="Self-hosted" />
+          <Badge
+            icon={<ShieldCheck className="h-3.5 w-3.5" />}
+            label="Not a SaaS · no signup, no billing"
+          />
+        </div>
       </div>
+      <BrandPanel />
     </section>
+  );
+}
+
+/** The hero's right column: the nav's vector mark at display size + wordmark. */
+function BrandPanel() {
+  return (
+    <div
+      aria-label="EverLink brand"
+      className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-zinc-200 bg-white px-6 py-10 dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      {/* Same asset as the nav mark (public/everlink-mark.svg), scaled up. */}
+      <img
+        src="/everlink-mark.svg"
+        alt="EverLink logo"
+        width={112}
+        height={112}
+        className="h-28 w-28"
+      />
+      <div className="text-center">
+        <div className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+          EverLink
+        </div>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Link-rot patrol agent · open source · self-hosted
+        </p>
+      </div>
+    </div>
   );
 }
 
