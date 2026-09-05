@@ -140,7 +140,7 @@ One trace, end to end.
 **The honest caveat.** With the stub backend, the *detection* number is real deterministic
 code, but the *steering* and *hard-metric* numbers validate the policy **oracle** and the
 orchestration plumbing — not live LLM judgment quality. Real Judge quality is scored on
-Bedrock with the identical harness: `run_evals --judge bedrock --full`.
+Bedrock with the identical harness: `run_evals --judge mantle --full`.
 
 ## "Any model," one seam
 

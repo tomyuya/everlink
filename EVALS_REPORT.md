@@ -12,7 +12,7 @@ the whole run is deterministic and needs **no AWS credentials**.
 python scripts/run_evals.py            # 30-case v1 subset  (Phase C baseline)
 python scripts/run_evals.py --full     # FULL 50-case set   (Phase F, spec §8 line 252)
 python scripts/run_evals.py --full --trace console   # + OpenTelemetry spans to stdout
-python scripts/run_evals.py --judge bedrock --full   # score the REAL Judge (needs creds)
+python scripts/run_evals.py --judge mantle --full     # score the REAL Judge (needs creds)
 ```
 
 The same harness is also asserted in CI by [`tests/test_evals.py`](tests/test_evals.py)
@@ -102,7 +102,8 @@ because the stub always escalates.
 > **`judge_backend=stub`**: detection accuracy is **REAL**; the steering / hard-metric
 > evaluators validate the policy **ORACLE** + orchestration plumbing, **NOT real LLM
 > judgment** (a stub always returns `ESCALATE_HUMAN`). Score the real Judge with
-> `--judge bedrock` (Phase F, spec §8) — the SAME harness and thresholds apply.
+> `--judge mantle` (the deployed Bedrock path; `--judge bedrock` is direct Claude) — the
+> SAME harness and thresholds apply.
 
 A stub run is always labelled with its backend in the report so it can never be mistaken
 for a Bedrock run. This report is a **stub** run: the 100% detection figure is real and

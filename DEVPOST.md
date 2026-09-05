@@ -96,7 +96,7 @@ production data).
   which bypasses the account-level Anthropic allowlist gate that blocks direct SigV4
   Claude), and the same seam accepts `BedrockModel` / Anthropic / OpenAI / Gemini /
   Mistral / Ollama / LiteLLM / SageMaker providers or a `ModelRouter` failover. The entire
-  311-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
+  312-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
   proof of provider-independence.
 - **OpenTelemetry** — optional tracing renders a run as one span tree (`run → {detect,
   judge, score}`), with Strands' own model/tool spans nested under the judge.
@@ -135,7 +135,7 @@ production data).
   prove the oracle isn't vacuous.
 - The **closed loop**: `verify_fix` re-probes after every write and rolls back on failure.
   On the seeded demo night, 37 dead links verify back to zero — and I show a rollback too.
-- **311 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
+- **312 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
   EverLink has never seen; a seeded live board so a judge never opens an empty inbox.
 - Six Mermaid **architecture diagrams** rendered natively on GitHub, and a secrets-clean
   repo (only `.env.example`, placeholders, gitignored data snapshots).

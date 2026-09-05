@@ -27,6 +27,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime as _datetime, timezone
 from typing import Callable, Iterable, Optional
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -154,6 +155,22 @@ def _slots_line(ids: list[str], cap: int = 5) -> str:
     return head + (" …" if len(ids) > cap else "")
 
 
+def _deep_link(board_url: str, path: str) -> str:
+    """The board URL for a page, or "" when no board is configured.
+
+    ``EVERLINK_BOARD_URL`` is the deployment root, and the root is now the public
+    landing page — the decision queue lives at ``/inbox``. A digest that links to
+    the root sends the operator to marketing copy instead of the cards they were
+    told to open, so the page path is appended here. A URL that already carries a
+    path (a sub-path deployment such as ``board.example.com/everlink``) is returned
+    untouched rather than guessed at.
+    """
+    if not board_url:
+        return ""
+    base = board_url.rstrip("/")
+    return f"{base}{path}" if urlsplit(base).path in ("", "/") else base
+
+
 def compose_decision_card(card: Decision, board_url: str = "") -> Note:
     """One medium/high-risk card as an immediate push (spec §7 single-card review)."""
     p = card.proposal
@@ -218,7 +235,7 @@ def compose_batch_list(cards: list[Decision], board_url: str = "") -> Note:
         f" • {c.id} — {_action(c.proposal.action)} · {len(c.affected_slot_ids)} slot(s)"
         for c in cards
     )
-    url = board_url.rstrip("/") if board_url else "(EVERLINK_BOARD_URL not set)"
+    url = _deep_link(board_url, "/inbox") or "(EVERLINK_BOARD_URL not set)"
     text = (
         "\U0001F7E2 These low-risk fixes are safe to approve together:\n\n"
         f"{items}\n\n"
@@ -231,7 +248,7 @@ def compose_batch_list(cards: list[Decision], board_url: str = "") -> Note:
         f"· {len(c.affected_slot_ids)} slot(s)</li>"
         for c in cards
     )
-    href = board_url.rstrip("/") if board_url else ""
+    href = _deep_link(board_url, "/inbox")
     cta = (
         f"<a href='{html.escape(href, quote=True)}' style='background:#10b981;color:#fff;text-decoration:none;"
         f"padding:9px 16px;border-radius:8px;font-size:14px'>Open the batch inbox</a>" if href else ""
@@ -288,7 +305,7 @@ def compose_morning_brief(brief: MorningBrief, board_url: str = "") -> Note:
     if brief.high_risk_ids:
         lines.append(f"High-risk now  : {_slots_line(brief.high_risk_ids)}")
     lines.append("")
-    url = board_url.rstrip("/") if board_url else "(EVERLINK_BOARD_URL not set)"
+    url = _deep_link(board_url, "/inbox") or "(EVERLINK_BOARD_URL not set)"
     lines.append(f"Open the inbox : {url}")
     lines.append('"It surfaces as a notification, not an app."')
     text = "\n".join(lines)
@@ -303,7 +320,7 @@ def compose_morning_brief(brief: MorningBrief, board_url: str = "") -> Note:
         *([stat("Scanned", brief.slots_scanned)] if brief.slots_scanned is not None else []),
         *([stat("Need decision", brief.problem_slots)] if brief.problem_slots is not None else []),
     ])
-    href = board_url.rstrip("/") if board_url else ""
+    href = _deep_link(board_url, "/inbox")
     cta = (
         f"<a href='{html.escape(href, quote=True)}' style='background:#0ea5e9;color:#fff;text-decoration:none;"
         f"padding:9px 16px;border-radius:8px;font-size:14px'>Open the inbox</a>" if href else ""

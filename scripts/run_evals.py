@@ -6,7 +6,7 @@ prints the report, and exits non-zero if any threshold fails. The default stub
 backend needs NO AWS credentials: detection accuracy is measured for real, while
 the steering / hard-metric evaluators validate the policy oracle and the
 orchestration plumbing (see the honesty note the report prints). Score the real
-Judge with --judge bedrock once credentials exist (Phase F).
+Judge with --judge mantle (the deployed production path) once credentials exist.
 
 --trace wraps the run in OPTIONAL OpenTelemetry spans (everlink.tracing); it is
 off by default and zero-cost, so the offline path never depends on a collector.
@@ -15,7 +15,7 @@ Usage:
     python scripts/run_evals.py                          # stub judge, 30-case v1 (offline)
     python scripts/run_evals.py --full                   # FULL 50-case Phase F set
     python scripts/run_evals.py --full --trace console   # + OTel spans printed to stdout
-    python scripts/run_evals.py --judge bedrock          # real Judge (needs AWS creds)
+    python scripts/run_evals.py --judge mantle           # real Judge (needs AWS creds)
     python scripts/run_evals.py --base-url http://127.0.0.1:8787   # external server
 """
 from __future__ import annotations
@@ -35,8 +35,9 @@ from everlink.fixtures import make_server  # noqa: E402
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Run EverLink Evals (30-case v1 subset, or --full for the 50-case set).")
-    ap.add_argument("--judge", choices=["none", "stub", "bedrock"], default="stub",
-                    help="Judge backend (default stub = offline)")
+    ap.add_argument("--judge", choices=["none", "stub", "bedrock", "mantle"], default="stub",
+                    help="Judge backend (default stub = offline; mantle = the deployed "
+                         "real-LLM path via Bedrock Mantle)")
     ap.add_argument("--base-url", default=None,
                     help="use an already-running fixture server instead of starting one")
     ap.add_argument("--timeout", type=float, default=10.0)

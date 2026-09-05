@@ -96,7 +96,7 @@ click submit on Devpost). Those stay open by design and are the last mile.
 ---
 
 **Bottom line.** Every engineering deliverable through Phase **G** is implemented,
-tested (**311** passing tests — `pytest -q` re-run 2026-09-05: 311 passed in 84.8s, fully
+tested (**312** passing tests — `pytest -q` re-run 2026-09-05: 312 passed in 44.2s, fully
 offline), committed, and pushed, and the **live board is deployed**
 (https://everlink-seven.vercel.app, read-only). The secrets zero-leak audit **passes**.
 What remains is the human last mile: AWS Builder ID, flipping the repo public, recording the

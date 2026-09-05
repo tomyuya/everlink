@@ -149,14 +149,22 @@ def test_compose_batch_list_content():
     note = compose_batch_list(cards, board_url="https://board.test")
     assert "2 low-risk" in note.subject
     assert "d1" in note.text and "d2" in note.text
-    assert "Batch-approve in the inbox: https://board.test" in note.text
-    assert "https://board.test" in note.html
+    assert "Batch-approve in the inbox: https://board.test/inbox" in note.text
+    assert "https://board.test/inbox" in note.html                 # deep link, not the landing page
 
 
 def test_compose_batch_list_no_url_uses_placeholder():
     note = compose_batch_list([_card("d1", ["s1"], risk="low")])
     assert "(EVERLINK_BOARD_URL not set)" in note.text
     assert "<a href" not in note.html
+
+
+def test_compose_batch_list_keeps_a_board_url_that_already_has_a_path():
+    """A sub-path deployment (board.example.com/everlink) must not get /inbox bolted on."""
+    note = compose_batch_list([_card("d1", ["s1"], risk="low")],
+                              board_url="https://board.test/everlink")
+    assert "https://board.test/everlink" in note.text
+    assert "/everlink/inbox" not in note.text
 
 
 # --------------------------------------------------------------------------- #
@@ -178,7 +186,8 @@ def test_compose_morning_brief_full():
     assert "High 4" in note.text and "Low 5" in note.text          # by-risk breakdown
     assert "Drop block 3" in note.text and "Replace URL 6" in note.text
     assert "notification, not an app" in note.text                 # the thesis line
-    assert "https://board.test" in note.text
+    assert "Open the inbox : https://board.test/inbox" in note.text
+    assert "https://board.test/inbox" in note.html                 # CTA lands on the queue
 
 
 def test_compose_morning_brief_minimal_omits_unknowns():

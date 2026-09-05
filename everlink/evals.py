@@ -15,7 +15,9 @@ ESCALATE_HUMAN for every case, so evaluators (2) and (3) validate the ORACLE and
 the orchestration plumbing — NOT real LLM judgment. They pass trivially on the
 stub and are reported with the backend named, so a stub run is never mistaken for
 a Bedrock run. Real Judge quality is scored on Bedrock in Phase F (spec §9) via
-``judge_backend="bedrock"``; the SAME harness and thresholds apply.
+``judge_backend="mantle"`` (the deployed production path — qwen through the Bedrock
+Mantle gateway) or ``judge_backend="bedrock"`` (direct Claude); the SAME harness and
+thresholds apply.
 
 ``build_cases(full=False)`` is the 30-case v1 subset (Phase C); ``build_cases(full=True)``
 is the FULL 50-case Phase F set (spec §8 distribution). Both run through the SAME harness
@@ -175,7 +177,8 @@ class EvalReport(BaseModel):
             return ("judge_backend=stub: detection accuracy is REAL; steering/hard-metric "
                     "evaluators validate the policy ORACLE + orchestration plumbing, NOT real "
                     "LLM judgment (a stub always ESCALATEs). Score the real Judge with "
-                    "--judge bedrock (Phase F, spec section 8).")
+                    "--judge mantle (the deployed Bedrock path; --judge bedrock is the "
+                    "direct-Claude route) — same harness, same thresholds.")
         return f"judge_backend={self.judge_backend}: all evaluators scored against live Judge output."
 
 
@@ -185,6 +188,9 @@ def _make_judge(backend: str):
     if backend == "bedrock":
         from .llm import get_model
         return agents.build_judge(get_model())
+    if backend == "mantle":
+        from .llm import get_mantle_model
+        return agents.build_judge(get_mantle_model())
     return None
 
 
