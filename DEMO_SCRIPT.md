@@ -18,8 +18,8 @@ keep it under 5:00 (spec §9).
 
 Cast: one operator (the author). Environment: terminal + Decision Board (Next.js) +
 email/Telegram. Judge backend for the live shots: `--judge mantle` — a **real LLM on Amazon
-Bedrock** (qwen through AWS's Bedrock Mantle gateway), rehearsed locally on 2026-09-05 at
-39s for `--limit 6`; the seeded card shots are replay.
+Bedrock** (qwen through AWS's Bedrock Mantle gateway), rehearsed locally twice on
+2026-09-05 at 39s and 56s for `--limit 6`; the seeded card shots are replay.
 
 ---
 
@@ -62,8 +62,9 @@ last full manual check: never
 ## Shot 3 — 1:00–1:35 · The nightly run · **Technological Implementation**
 
 **On screen:** terminal. `python -m everlink scan --site aethelgem --judge mantle --dry-run
---limit 6` (start it at 0:38 — measured 39s, so the report lands around 1:17), then
-`python -m everlink notify --brief --dry-run` (~2s, the morning brief with 16 cards and its
+--limit 6` (start it at 0:38 — measured 39s and 56s on two runs, so the report lands
+between 1:17 and 1:34; **1:20 is the cut decision point**), then
+`python -m everlink notify --brief --dry-run` (2–8s, the morning brief with 16 cards and its
 "nothing sent" honesty line). Cut to the Board's `/inbox` showing the problem queue. Both
 `--dry-run` honesty lines stay in frame.
 
@@ -161,7 +162,10 @@ Optionally `--trace console` to flash the OpenTelemetry span tree.
 
 **On screen:** point EverLink's `generic` read-only adapter at an arbitrary well-known blog
 — rehearsed command: `python -m everlink scan --site https://blog.python.org
---include-internal --dry-run --limit 8` (~10s, 8/8 healthy) — then navigate the **live
+--include-internal --dry-run --limit 8` (press enter at 4:10; measured 10s and 58s on two
+runs — external network, so **4:26 is the cut decision point**: if the report has landed,
+hold on 8/8 healthy, otherwise cut to the board while the real crawl keeps scrolling) — then
+navigate the **live
 demo**: https://everlink-seven.vercel.app landing page → `/inbox` (seeded so the queue is
 never empty) → `/how-it-works` (the public primer: brand panel, repo link, contact).
 

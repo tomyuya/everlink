@@ -8,11 +8,11 @@
 1. **代理必须先活**：v2rayN（`D:\d36j0t1v\v2rayN\v2rayN.exe`）必须已启动且连上节点；验证 `python d:\qcoder\_proxy_check.py` 输出 `LISTENING`。**刚启动后节点需热身**——第一次导航 vercel.app 可能超时，重试即通。
 2. **board 用生产地址** `https://everlink-seven.vercel.app`（禁 localhost）。**收件箱在 `/inbox`**（`/` 已是品牌落地页，不含卡片），录前导航一次 `/inbox` 确认 `Inbox · EverLink Board` 标题与 16 张 pending 卡出现。
    **录前预热**：把下方 URL 清单里的 board 地址逐个先导航一遍——Vercel 冷启动首航会报 10s 超时（其实内容已渲染），预热后录制时才秒开。
-   **只读部署（09-05 起）**：生产 board 已设 `NEXT_PUBLIC_BOARD_READONLY=1`——`/inbox` 的勾选框与批量条、卡片上的 approve/reject 按钮统一换成 `Read-only view — decisions are disabled on this deployment.` 提示行，API 写操作返回 403。理由：匿名评委若点了 approve，下一次 Railway nightly 的 worker 会真去改 AethelGem 线上内容；只读同时也把 Shot 4"只展示已落库结果、不现场点击"的口径变成平台强制。**画面影响**：Shot 4 三屏（`/inbox` 与两个 `?status=` 视图）不再有批量条，改为只读提示行，卡片本身与计数不变。
+   **只读部署（09-05 起）**：生产 board 已设 `NEXT_PUBLIC_BOARD_READONLY=1`——`/inbox` 的勾选框与批量条、卡片上的 approve/reject 按钮统一换成 `Read-only view — decisions are disabled on this deployment.` 提示行，API 写操作返回 403。理由：匿名评委若点了 approve，下一次 Railway nightly 的 worker 会真去改 AethelGem 线上内容；只读同时也把 Shot 4"只展示已落库结果、不现场点击"的口径变成平台强制。**画面影响**：Shot 4 三屏（`/inbox` 与两个 `?status=` 视图）不再有勾选框/批量条，改为只读提示行；卡片详情页（如 pending 卡 `dec-ea20afaafa`）原按钮位置同样显示该提示。二遍演练 DOM 实测：`/inbox` 的 `input`/`button` 数均为 **0**，只读提示存在，16/37/69 计数不变。
 3. **Judge 模式定档（2026-09-05 本地实测通过）**：默认 `--judge mantle` 录 Shot 3，字幕用 **[REAL]**（真实 LLM 调用，qwen via Bedrock Mantle 网关）。本地 `--limit 6` 实测 **39s / rc=0**，结构可复现（同 slot、同 `REWRITE_SENTENCE`、5 healthy + 1 offer_changed、steering 0 blocked、2 tool calls、1 决策卡），措辞每次不同属正常。
    **本地 mint 前置条件**：走 `~/.aws/credentials` 的 `[default]`；`.env` 里**绝不能有空值的 `AWS_ACCESS_KEY_ID=` / `AWS_SECRET_ACCESS_KEY=` / `AWS_PROFILE=` 行**——空串会遮蔽共享凭据文件，mint 直接报 `Failed to mint Bedrock Mantle bearer token`（09-05 已把这三行注释掉；`.env` 若重建须复查）。备选路径：`BEDROCK_MANTLE_API_KEY`（console 铸的 key，直作 OpenAI api_key）。直连 Claude 工单若批了可选 `--judge bedrock`；当晚都不可用才退回 `--judge stub` + 文末 **ALT cue**（诚实优先，不许嘴替）。
 4. **数字复核（以屏幕实况为准，2026-09-05 复探）**：23,476（`data/slots_summary.json` 未变）；board 实况 **pending 16 / applied 37 / rejected 69 / healed 37**——69 条 rejected = 4 人工typed驳回 + 54 条 nightly recheck 误报退役 + 11 条 09-05 系统去重驳回，全部带理由落库；audit 全量 **steering_cancel 3 / write 38 / verify 38 / rollback 1 / dead_letter 1**（事件名是 write/verify，不存在 apply）；evals cards 41（fixture 语境）。`[REAL]`/`[SEEDED REPLAY]`/`[EST.]` 角标照 DEMO_SCRIPT 三标签执行。
-5. **遮敏**：DB host、带 token 的 URL、`.env`、scan 输出里的联盟 tag（`tag=aethelgem2026-20`）blur/裁掉；board 卡片 Evidence 区块里的联盟 tag 同样要遮（如 `dec-b21f3d82bc` 的新/旧 URL 带 `tag=sandcart-20`）。
+5. **遮敏**：DB host、带 token 的 URL、`.env`、scan 输出里的联盟 tag（`tag=aethelgem2026-20`）blur/裁掉；board 卡片 Evidence 里的联盟 tag 同样要遮——09-05 二遍演练实测：`dec-b21f3d82bc` 的 Evidence 只渲染**应用后的新 URL**（`https://www.amazon.com/dp/…?tag=aethelgem-20`，Healthy HTTP 200），并不并列旧 URL，该 `tag=aethelgem-20` 需遮。
 6. 字幕烧录或后期贴：每条 cue ≤ 2 行；角标标签与字幕同时出现。
 7. **录屏范围**：全屏，须同时罩住 **IDE 终端面板**（终端镜头）与 **IDE 内置 Browser view 面板**（board/外站镜头）；IDE 最大化，无关窗口移出。Browser view 若关闭，我 navigate 即唤醒（演练已验证）。
 
@@ -32,7 +32,7 @@
 
 ## Shot 2 · 0:30–1:00 · 三问：problem / who / why
 
-画面：三张标题卡 PROBLEM · WHO · WHY（或人对镜头）。**0:38 在 IDE 终端敲入 Shot 3 的 scan 命令并回车**——实测 39s，1:17 前后 report 定格，正好接上 Shot 3 的画面节奏。
+画面：三张标题卡 PROBLEM · WHO · WHY（或人对镜头）。**0:38 在 IDE 终端敲入 Shot 3 的 scan 命令并回车**——09-05 两次实测 **39s / 55.9s**（外网 + Amazon L2 解析波动），report 定格落在 **1:17–1:34** 之间；**1:20 是切换判定点**，规则见 Shot 3。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -43,7 +43,7 @@
 
 ## Shot 3 · 1:00–1:35 · 夜间运行 [REAL/SEEDED]
 
-画面：scan 已于 0:38 启动（`python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6`，09-05 mantle 实测 **39s**：`[1/2] discovering + detecting...` 立刻出现，1:17 前后 report 定格——6 扫 / 5 healthy + 1 offer_changed / 真实 qwen 的 `REWRITE_SENTENCE` 提案与理由滚动 / steering 0 blocked / 1 决策卡）→ 1:17–1:20 `python -m everlink notify --brief --dry-run`（~2s，**16 pending** 晨报 + "nothing sent" 诚实行）→ 1:20 起切 Browser view：**生产 board `/inbox`**（16 张 pending 卡）。两句诚实行（`--dry-run: nothing written to any database` / `nothing sent`）在画面内**保留**。万一 scan 到 1:20 仍未定格，直接切 board——终端里仍在滚动的真实调用本身就是 [REAL] 证据。
+画面：scan 已于 0:38 启动（`python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6`，09-05 两次实测 **39s / 55.9s**：`[1/2] discovering + detecting...` 立刻出现，report 定格在 **1:17–1:34**——6 扫 / healthy 与 offer_changed 的配比在 **5+1 与 4+2** 之间浮动 / 真实 qwen 的 `REWRITE_SENTENCE` 提案与理由滚动 / steering 0 blocked / 决策卡 **1–2 张**，均属 [REAL] 正常波动）→ **1:20 切换判定点**：① report 已定格 → 立刻 `python -m everlink notify --brief --dry-run`（实测 **2s / 7.5s**，**16 pending** 晨报，末行 `Open the inbox : https://everlink-seven.vercel.app/inbox`，09-05 已修为深链不再指根路径），晨报停 3–5s 再切 board；② 1:20 仍在滚 → **直接切 Browser view：生产 board `/inbox`**（16 张 pending 卡），live notify 那一拍改用 **ALT-3**（终端里仍在滚动的真实调用本身就是 [REAL] 证据）。两句诚实行（`--dry-run: nothing written to any database` / `nothing sent`）在画面内**保留**。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -79,7 +79,7 @@
 
 ## Shot 6 · 2:50–3:40 · 安全幕 2 + 闭环 [REAL/SEEDED]
 
-画面（全 URL 导航）：(a) 打开 **`/decision/dec-b21f3d82bc`**（Applied · High risk · Replace URL：Aurora Lab-Grown Diamond Solitaire 死链→活 offer，Evidence 区块含旧/新 URL）；(b) **`/audit?event=write`**（38 行，每条 applied 修复一行、单事务）与 **`/audit?event=verify`**（38 行复探）；(c) `/report`：**Links healed 37 / Slots fixed 37**；(d) **`/audit?event=rollback`**（1 行）+ **`/audit?event=dead_letter`**（1 行，强制失败死信对）。**展示已落库闭环，不现场触发。**
+画面（全 URL 导航）：(a) 打开 **`/decision/dec-b21f3d82bc`**（Applied · High risk · Replace URL：Aurora Lab-Grown Diamond Solitaire 死链→活 offer；Evidence 区块渲染**应用后的新 URL** + `Healthy HTTP 200`，联盟 tag 需遮）；(b) **`/audit?event=write`**（38 行，每条 applied 修复一行、单事务）与 **`/audit?event=verify`**（38 行复探）；(c) `/report`：**Links healed 37 / Slots fixed 37**；(d) **`/audit?event=rollback`**（1 行）+ **`/audit?event=dead_letter`**（1 行，强制失败死信对）。**展示已落库闭环，不现场触发。**
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -92,7 +92,7 @@
 
 ## Shot 7 · 3:40–4:10 · 评测：50 例三硬指标 [REAL]
 
-画面：终端 `python scripts/run_evals.py --full --trace console`（实测 22s：先滚 OTel JSON span 流，最后定格 summary 块——50/50=100% / steering 0 / 三硬指标 100% / cards 41 / **OVERALL: PASS** + stub 诚实 note）。
+画面：终端 `python scripts/run_evals.py --full --trace console`（三次实测 **19s / 20.5s / 22s**：先滚 OTel JSON span 流，最后定格 summary 块——50/50=100% / steering 0 / 三硬指标 100% / cards 41 / **OVERALL: PASS** + stub 诚实 note）。**note 末句 09-05 已改口径**：屏幕上是 `Score the real Judge with --judge mantle (the deployed Bedrock path; --judge bedrock is the direct-Claude route)`——与本片 `--judge mantle` 的真跑一致，不再是过期的 `--judge bedrock`。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -103,7 +103,7 @@
 
 ## Shot 8 · 4:10–4:40 · 通用适配器 + live demo
 
-画面：IDE 终端 `python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`（09-05 复演 ~10s：8/8 healthy + dry-run 诚实行）→ 切 Browser view：生产 board **落地页 `/`**（品牌 hero 面板："EverLink · the autonomous link-rot steward"，09-05 新增）→ **`/inbox`**（种子数据保证总有真东西可看）→ **`/how-it-works`**（公开介绍页：品牌面板 logo 链仓库、页脚 GitHub + 联系邮箱；09-05 新增镜头）。
+画面：**4:10 敲回车** IDE 终端 `python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`（09-05 两次实测 **10s / 58.3s**——外网波动大，8/8 healthy + dry-run 诚实行）。**4:26 判定点**：① 已定格 → 终端停 3–5s 再切 board；② 仍在滚 → **直接切 board**（终端里还在跑的真实抓取就是证据，字幕 4:18–4:26 "从没见过的站" 配滚动画面同样成立），generic 的 8/8 不进画面。随后 Browser view：生产 board **落地页 `/`**（`h1` = "EverLink"，副标 `The autonomous link-rot steward`；页面 title 为 "EverLink · the autonomous link-rot steward"——正文首字母大写，字幕/文案引用时按实际大小写）→ **`/inbox`**（种子数据保证总有真东西可看）→ **`/how-it-works`**（公开介绍页：品牌 mark 链回 `/`、正文 GitHub 链接 ×2 + 联系邮箱 mailto；09-05 新增镜头）。
 
 | in–out | EN subtitle | 中文对照 |
 |---|---|---|
@@ -127,13 +127,13 @@
 ## 命令小抄（终端镜头，在 IDE 终端面板跑；节奏用 sleep 控制）
 
 ```
-Shot 3:  python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6   (0:38 敲回车；09-05 实测 39s，真实 qwen)
-         python -m everlink notify --brief --dry-run                                  (~2s，16 pending)
-Shot 7:  python scripts/run_evals.py --full --trace console                           (~19-22s)
-Shot 8:  python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8   (~10s)
+Shot 3:  python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6   (0:38 敲回车；实测 39–56s，真实 qwen；1:20 判定点)
+         python -m everlink notify --brief --dry-run                                  (实测 2–8s，16 pending，末行 inbox 深链)
+Shot 7:  python scripts/run_evals.py --full --trace console                           (实测 19–22s)
+Shot 8:  python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8   (4:10 敲回车；实测 10–58s；4:26 判定点)
 ```
 
-工作目录：`d:\qcoder\everlink`。
+工作目录：`d:\qcoder\everlink`。**四条命令都要当场敲回车**（不许提前跑完再回放）；时长波动全部落在判定点规则里，不需要临场改命令、改参数或改顺序。
 
 ## Board URL 清单（生产，2026-09-05 复演逐条 Browser DOM 验证渲染 OK）
 
@@ -181,6 +181,10 @@ S8  介绍页   https://everlink-seven.vercel.app/how-it-works   (品牌面板+�
 | evals `--full --trace` | 19s；OVERALL PASS（cards 41） |
 | generic blog.python.org | 8/8 healthy + dry-run 行 |
 | 新发现并已修的坑 | ① `.env` 里空值 `AWS_*` 行遮蔽 `~/.aws/credentials` → mantle mint 失败（已注释三行，B/C 两路实测 mint 0.9–1.1s OK，无需代理）；② board 列表页迁到 `/inbox`，`/` 变落地页（URL 清单已改）；③ Vercel 冷启动首航报 10s 超时但 `readyState=complete`、内容齐全 → **录前预热全部 URL**；④ `pip install` 参数带引号会被原样传参报错（用 `pip install strands-agents[openai]==1.54.0` 不加引号） |
+| 二遍演练（只读部署后，Browser 17 拍） | **全部 PASS**：字卡三页 · aethelgem（title/h1 实测）· hotdeals **2.3s 无超时** · `/` 落地页 · `/inbox` 16 卡 + 只读提示 + `input`/`button` 均 0 · applied 37 · rejected 69 · `dec-7158d74e33`（$349 / under $200 + 页脚 GH/mailto）· pending 卡 `dec-ea20afaafa` 只读提示 · `?event=steering_cancel` chip + 3 行 · `dec-2b91672858` · `dec-b21f3d82bc` · write/verify/rollback/dead_letter = 38/38/1/1 · `/report` 37/37 · `/how-it-works`（GH×2 + mailto + mark）。两处文案按实测修正：hero 正文首字母大写（小写串只在 title）；Evidence 只渲染新 URL（`tag=aethelgem-20`） |
+| 三遍演练（终端四拍干净顺序复演） | **全部 rc=0**：scan `--judge mantle` **55.9s**（6 扫 → 4 healthy + 2 offer_changed、2 卡、4 tool calls，比首演多一个 slot `aethelgem:8:44:0`——Amazon L2 实况波动，属 [REAL] 正常）· notify `--brief` **7.5s**（18 slots / 16 cards）· evals `--full` **20.5s** OVERALL PASS · generic blog.python.org **58.3s**（8/8 healthy）。时长波动已写进各 Shot 的判定点规则（1:20 / 4:26），录制时不需要临场改命令 |
+| 三遍发现并已修的产品问题 | ① **notify 把 board 根 URL 当收件箱链接**（`/` 现在是落地页）→ 新增 `_deep_link()`，晨报与批量信的 text + html CTA 一律指 `/inbox`（子路径部署如 `board.x/everlink` 不追加，新增 1 条断言守住）；② **evals 屏幕 note 过期**（写 `--judge bedrock`）→ 改 `--judge mantle`，并给 `run_evals.py --judge` 与 `evals._make_judge()` 补上 mantle 分支——此前该 flag 根本不存在，DEMO_SCRIPT "scored with the same harness via --judge mantle" 是空头支票（实测 `_make_judge('mantle')` 1.2s 建出真模型 Agent）；同步 EVALS_REPORT / README / BLOG_DRAFT；③ 测试数 **311 → 312**，DEVPOST×2 / README×2 / SUBMISSION_CHECKLIST×1 已同步 |
+| 已知坑（三遍补） | 用管道或重定向捕获 Python 输出时按 cp936 编码，em dash / 箭头会变 `??`——**只是捕获假象**：IDE 终端是 Unicode 控制台直写，录制画面正常。**不要为此改命令或把文案降级成 ASCII** |
 
 ## 录制口径
 
@@ -190,6 +194,7 @@ S8  介绍页   https://everlink-seven.vercel.app/how-it-works   (品牌面板+�
 
 - **ALT-1**（换 Shot 3 的 1:15–1:23）：The Judge seam runs on its injected stub tonight — same structured Proposal, same harness that scores the live Bedrock path. ／ 今晚 Judge 缝跑在注入 stub 上——同样的结构化 Proposal、同一套给 Bedrock 真路径打分的评测。
 - **ALT-2**（仅当 mantle 与 bedrock 当晚都跑不起来、全程未真跑 Bedrock 时才换 Shot 9 的 "Built with the Strands Agents SDK and Amazon Bedrock" 句）：Built with the Strands Agents SDK for Agents for Humans. ／ 用 Strands Agents SDK 为 Agents for Humans 而建。（注：mantle 模式即真跑 Bedrock Mantle 网关，此时收尾可如实宣称 "Strands SDK + Amazon Bedrock"，无需用 ALT-2。）
+- **ALT-3**（仅当 Shot 3 的 scan 到 1:20 仍未定格、live notify 那一拍被切掉时换 1:29–1:35 句）：By morning: 16 problem slots are waiting in my inbox. **[REAL + SEEDED REPLAY]** ／ 早上：16 个问题槽位在我的收件箱里等着。**[真实+种子回放]**（去掉 "as a morning brief"——晨报没进画面就不宣称它进画面；16 这个数字由 `/inbox` 的 16 张 pending 卡实证。）
 
 ## 录后清单
 
