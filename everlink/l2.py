@@ -48,8 +48,14 @@ UNAVAILABLE_PHRASES = [
 ]
 # Structural (id/class) hints that outweigh prose, common on Amazon PDPs.
 # NOTE: id="availability" is deliberately excluded — that container is present on
-# *healthy* pages too ("In Stock"); the real out-of-stock state is id="outOfStock".
-UNAVAILABLE_MARKERS = ['id="outofstock"', "outofstock"]
+# *healthy* pages too ("In Stock"). And only the STRUCTURAL buybox element
+# id="outOfStock" is trusted: the bare token "outofstock" is NOT a marker, because
+# as a whole-page substring it matches JS config flags, swatch data-attributes and
+# CSS class names on perfectly LIVE pages — the same false-positive class as a bare
+# "404" (real incident: live Amazon PDPs misjudged offer_changed). A genuine
+# out-of-stock state renders id="outOfStock" and/or says so in the availability
+# region, both of which are still caught below.
+UNAVAILABLE_MARKERS = ['id="outofstock"']
 
 _PRICE_RE = re.compile(
     r"(?:\$|£|€|¥|USD|GBP|EUR)\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)", re.I

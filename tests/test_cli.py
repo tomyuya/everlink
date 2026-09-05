@@ -39,7 +39,8 @@ def _slot(sid: str = "s1", url: str = "https://www.amazon.com/dp/B0F21KVBHN") ->
 
 
 def _args(**kw) -> argparse.Namespace:
-    base = dict(id=None, limit=100, rate_delay=0, timeout=15.0, no_l2=False, apply=False)
+    base = dict(id=None, limit=100, rate_delay=0, timeout=15.0, no_l2=False,
+                confirm=1, apply=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -141,6 +142,47 @@ def test_recheck_closes_the_connection(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# recheck --confirm — the stability gate (bot-mitigated hosts flip verdicts)
+# --------------------------------------------------------------------------- #
+def test_recheck_confirm_gate_leaves_an_unstable_card(monkeypatch):
+    # Healthy on the first probe but flips unhealthy on confirmation => NOT retired.
+    # That flip is exactly the Amazon bot-mitigation non-determinism the gate exists
+    # to catch; retiring on the lucky first probe would suppress a real (if flaky)
+    # signal, which is itself a trust violation.
+    store = InMemoryDecisionStore()
+    store.enqueue([_card()])
+    conn = _FakeConn()
+    monkeypatch.setattr(cli, "_open_db_store", lambda: (conn, store))
+    monkeypatch.setattr(db, "fetch_slot", lambda c, sid: _slot(sid))
+    calls = {"n": 0}
+
+    def _flaky(slot, **kw):
+        calls["n"] += 1
+        verdict = "healthy" if calls["n"] == 1 else "offer_changed"   # healthy, then flips
+        return CheckResult(slot_id=slot.id, final_verdict=verdict)
+
+    monkeypatch.setattr(detect, "check_slot", _flaky)
+    audits: list = []
+    monkeypatch.setattr(db, "insert_audit",
+                        lambda c, a, e, p=None: audits.append((a, e, p)))
+    assert cli.cmd_recheck(_args(apply=True, confirm=3)) == 0
+    assert store.get("dec-1").status == "pending"       # unstable -> left for a human
+    assert audits == []                                 # nothing retired, nothing audited
+
+
+def test_recheck_confirm_gate_retires_a_stable_card(monkeypatch):
+    # Stays healthy across all N confirmations => a proven false positive, retired.
+    store = InMemoryDecisionStore()
+    store.enqueue([_card()])
+    _conn, audits = _wire(monkeypatch, store, verdict="healthy")
+    assert cli.cmd_recheck(_args(apply=True, confirm=3)) == 0
+    card = store.get("dec-1")
+    assert card.status == "rejected"
+    assert "consecutive re-probes" in (card.reject_reason or "")   # honest proof string
+    assert any(e == "false_positive_retired" for _a, e, _p in audits)
+
+
+# --------------------------------------------------------------------------- #
 # parser wiring
 # --------------------------------------------------------------------------- #
 def test_recheck_subcommand_is_registered():
@@ -149,6 +191,14 @@ def test_recheck_subcommand_is_registered():
     assert args.command == "recheck" and args.id == "dec-9"
     assert args.apply is True and args.no_l2 is True
     assert args.func is cli.cmd_recheck
+
+
+def test_recheck_confirm_flag_is_registered():
+    ap = cli.build_parser()
+    args = ap.parse_args(["recheck", "--confirm", "3", "--apply"])
+    assert args.confirm == 3 and args.apply is True
+    # default is a single probe (back-compatible)
+    assert ap.parse_args(["recheck"]).confirm == 1
 
 
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

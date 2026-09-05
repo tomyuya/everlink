@@ -119,6 +119,25 @@ SHELL_OUTOFSTOCK = (
     '<div id="outOfStock">Currently unavailable.</div>'
     '</body></html>'
 )
+# A LIVE PDP that merely *mentions* the concatenated token "outofstock" in JS
+# config, swatch data-attributes and CSS class names — with the buybox saying
+# "In Stock" and NO structural id="outOfStock". A whole-page substring match on
+# the bare token false-positived offer_changed on real Amazon cards (the
+# aethelgem flippers) whenever bot-mitigation served a noisy-but-live page.
+SHELL_OUTOFSTOCK_NOISE = (
+    '<html><head><title>Amazon.com: Rose-Cut Diamond Stud Earrings</title></head><body>'
+    '<span id="productTitle">Rose-Cut Diamond Stud Earrings, 14k White Gold</span>'
+    '<span class="a-offscreen">$249.00</span>'
+    '<div id="availability">In Stock.</div>'
+    '<button>Add to Cart</button>'
+    + _PAD +
+    '<script>var P = {"outOfStockThreshold":0,"isOutOfStock":false,"outofstockRedirect":true};</script>'
+    '<div id="similarities"><ul>'
+    '<li class="swatch" data-outofstock="1">Alternative A</li>'
+    '<li class="outofstock-hidden">Alternative B</li>'
+    '</ul></div>'
+    '</body></html>'
+)
 
 
 def test_noisy_healthy_pdp_is_ok_not_dead():
@@ -148,6 +167,16 @@ def test_structural_outofstock_beats_shell():
     r = parse_product_page(SHELL_OUTOFSTOCK)
     assert r.verdict == "unavailable"
     assert "structural marker" in r.evidence
+
+
+def test_shell_page_with_outofstock_noise_is_ok():
+    # The aethelgem-flipper regression: a LIVE PDP whose buybox says "In Stock"
+    # must NOT be judged unavailable just because the bare token "outofstock"
+    # appears somewhere in its JS/related-items markup. Only the STRUCTURAL
+    # id="outOfStock" element (or an availability-region phrase) may assert it.
+    r = parse_product_page(SHELL_OUTOFSTOCK_NOISE)
+    assert r.verdict == "ok", f"live PDP misjudged as {r.verdict}: {r.evidence}"
+    assert r.extracted_price == "$249.00"
 
 
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

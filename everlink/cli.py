@@ -225,6 +225,27 @@ def cmd_decide(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _probe_card(conn, card, *, timeout: float, use_l2: bool, rate_delay: float):
+    """Re-probe every slot of ONE card. Returns ``(checks, all_healthy)``.
+
+    ``all_healthy`` is True only when the card has at least one resolvable slot
+    and EVERY slot's current verdict is healthy — i.e. the detector that raised
+    the card now finds nothing wrong with it.
+    """
+    from . import db, detect
+
+    checks = []
+    for slot_id in card.affected_slot_ids:
+        slot = db.fetch_slot(conn, slot_id)
+        if slot is None:
+            continue
+        checks.append(detect.check_slot(slot, timeout=timeout, use_l2=use_l2))
+        if rate_delay:
+            time.sleep(rate_delay)
+    healthy = bool(checks) and all(c.final_verdict == "healthy" for c in checks)
+    return checks, healthy
+
+
 def cmd_recheck(args: argparse.Namespace) -> int:
     """Re-probe pending cards with the CURRENT detector; retire proven false positives.
 
@@ -238,6 +259,11 @@ def cmd_recheck(args: argparse.Namespace) -> int:
     ``--apply`` rejects those cards with an honest auto-recheck reason and audits the
     retirement. A card with ANY slot still unhealthy is a real problem and is left
     untouched. Politeness mirrors ``scan``: <=1 request per link, ``--rate-delay`` apart.
+
+    ``--confirm N`` guards against bot-mitigated hosts (e.g. Amazon) that serve a live
+    page on one probe and a degraded one on the next: a false-positive candidate is
+    re-probed until N consecutive all-healthy results agree, and a card whose verdict
+    flips is reported UNSTABLE and left for a human instead of being retired.
     """
     from . import db, detect
 
@@ -262,43 +288,66 @@ def cmd_recheck(args: argparse.Namespace) -> int:
             print("  no pending decision cards to recheck.")
             return 0
 
+        confirm = max(1, int(getattr(args, "confirm", 1) or 1))
         print(f"rechecking {len(cards_to_check)} pending card(s) with the current detector "
-              f"(L2={'off' if args.no_l2 else 'on'}, rate_delay={args.rate_delay}s) ...")
-        false_positives: list[tuple] = []              # (card, [CheckResult])
+              f"(L2={'off' if args.no_l2 else 'on'}, rate_delay={args.rate_delay}s, "
+              f"confirm={confirm}x) ...")
+        false_positives: list[tuple] = []              # (card, [CheckResult]) stable & proven
+        unstable: list[tuple] = []                     # (card, verdicts) flipped on confirmation
         for card in cards_to_check:
-            checks = []
-            for slot_id in card.affected_slot_ids:
-                slot = db.fetch_slot(conn, slot_id)
-                if slot is None:
-                    continue
-                checks.append(detect.check_slot(slot, timeout=args.timeout,
-                                                use_l2=not args.no_l2))
-                if args.rate_delay:
-                    time.sleep(args.rate_delay)
+            checks, healthy = _probe_card(conn, card, timeout=args.timeout,
+                                          use_l2=not args.no_l2, rate_delay=args.rate_delay)
             if not checks:
                 print(f"   * {card.id}: no resolvable slots; skipped.")
                 continue
             verdicts = ", ".join(f"{c.slot_id}={c.final_verdict}" for c in checks)
-            if all(c.final_verdict == "healthy" for c in checks):
-                false_positives.append((card, checks))
-                print(f"   * {card.id}: FALSE POSITIVE — every slot re-probed healthy "
-                      f"({verdicts}).")
-            else:
+            if not healthy:
                 print(f"   * {card.id}: still a real problem ({verdicts}); left as-is.")
+                continue
+            # Candidate false positive. Amazon and other bot-mitigated hosts can serve
+            # a live page on one probe and a degraded/unavailable one on the next, so a
+            # SINGLE healthy probe is not proof (observed in production: cards flipping
+            # offer_changed<->healthy minutes apart). With --confirm N, require N
+            # consecutive all-healthy probes before trusting the retirement; a card that
+            # flips is reported UNSTABLE and left for a human rather than silently dropped.
+            stable = True
+            for k in range(confirm - 1):
+                if args.rate_delay:
+                    time.sleep(args.rate_delay)
+                checks2, healthy2 = _probe_card(conn, card, timeout=args.timeout,
+                                                use_l2=not args.no_l2, rate_delay=args.rate_delay)
+                if not healthy2:
+                    v2 = ", ".join(f"{c.slot_id}={c.final_verdict}" for c in checks2) or "no slots"
+                    print(f"   * {card.id}: UNSTABLE — probe #{k + 2} came back ({v2}); "
+                          f"left for human review.")
+                    stable = False
+                    break
+            if not stable:
+                unstable.append((card, verdicts))
+                continue
+            note = (f"{confirm}/{confirm} probes healthy" if confirm > 1
+                    else "every slot re-probed healthy")
+            false_positives.append((card, checks))
+            print(f"   * {card.id}: FALSE POSITIVE — {note} ({verdicts}).")
 
+        if unstable:
+            print(f"\n  {len(unstable)} card(s) probed UNSTABLE (verdict flipped between "
+                  f"confirmations); NOT retired — a human should check them.")
         if not false_positives:
-            print("\n  no false positives found; nothing to retire.")
+            print("\n  no stable false positives found; nothing to retire.")
             return 0
         if not args.apply:
-            print(f"\n  --dry-run (default): {len(false_positives)} false-positive card(s) "
-                  f"would be retired. Re-run with --apply to reject + audit them.")
+            print(f"\n  --dry-run (default): {len(false_positives)} stable false-positive "
+                  f"card(s) would be retired. Re-run with --apply to reject + audit them.")
             return 0
 
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         retired = 0
         for card, checks in false_positives:
             verdicts = ", ".join(f"{c.slot_id}={c.final_verdict}" for c in checks)
-            reason = (f"auto-recheck {stamp}: every slot re-probed healthy ({verdicts}); "
+            proof = (f"{confirm} consecutive re-probes all healthy" if confirm > 1
+                     else "every slot re-probed healthy")
+            reason = (f"auto-recheck {stamp}: {proof} ({verdicts}); "
                       f"the original verdict was a false positive.")
             if store.reject(card.id, reason):
                 retired += 1
@@ -307,6 +356,7 @@ def cmd_recheck(args: argparse.Namespace) -> int:
                                             "action": card.proposal.action,
                                             "slots": [c.slot_id for c in checks],
                                             "recheck_verdicts": [c.final_verdict for c in checks],
+                                            "confirmations": confirm,
                                             "reason": reason}, default=str))
         print(f"\n  retired {retired}/{len(false_positives)} false-positive card(s) "
               f"(rejected + audited). No real problem card was touched.")
@@ -572,6 +622,10 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--rate-delay", type=float, default=1.0, help="seconds between probe requests")
     rc.add_argument("--timeout", type=float, default=15.0)
     rc.add_argument("--no-l2", action="store_true", help="L1 only (skip the L2 page re-parse)")
+    rc.add_argument("--confirm", type=int, default=1,
+                    help="re-probe each false-positive candidate N times (spaced by "
+                         "--rate-delay) and retire only if ALL N come back healthy; a card "
+                         "that flips is reported UNSTABLE and left for a human (default 1)")
     rc.add_argument("--apply", action="store_true",
                     help="actually reject + audit the proven false positives "
                          "(default is dry-run: print what would be retired, write nothing)")
