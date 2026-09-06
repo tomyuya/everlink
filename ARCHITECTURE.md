@@ -20,7 +20,7 @@ flowchart LR
     subgraph SRC["Read-only source sites (production)"]
         AG["AethelGem<br/>(Django blocks)"]
         HD["hotdeals<br/>(products jsonb)"]
-        SC["sandcart<br/>(section links)"]
+        SC["FlashDeals<br/>(key: sandcart)"]
     end
 
     subgraph EL["EverLink agent backend"]
@@ -237,7 +237,7 @@ flowchart LR
         E[("EverLink DB<br/>link_slots, slot_checks,<br/>decisions, write_snapshots, audit_log")]
         S1[("AethelGem (read-only)")]
         S2[("hotdeals (read-only)")]
-        S3[("sandcart (read-only)")]
+        S3[("FlashDeals (read-only)")]
     end
     E -- "read" --> N
     N -- "gated write" --> E

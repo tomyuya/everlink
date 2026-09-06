@@ -108,18 +108,19 @@ Mantle gateway today; direct Claude the moment the account's allowlist gate clea
   opens on a public landing page and a static **`/how-it-works`** primer — open-source /
   self-hosted positioning, the two-database model, and the deployer contract, rendered with
   no DB configured, so a reviewer can read what EverLink *is* before touching any data. The
-  public deployment runs with `NEXT_PUBLIC_BOARD_READONLY=1`: decision writes are refused
-  with `403`, so an anonymous visitor can never approve a fix that the nightly worker would
-  then apply to live content. Source-site DB access is strictly read-only, and a write
+  public deployment is **fully interactive**: a reviewer can approve or reject any pending
+  card, and the nightly worker executes approved cards through the gated Writer path —
+  snapshot → apply → re-probe → rollback-on-failure — against EverLink's own mirror store.
+  Source-site DB access is strictly read-only, and a write
   guardrail (`db._assert_writable`) refuses any DSN matching a source-site or deny-list host,
-  so the production instance can never be written even by accident.
+  so a production site can never be written even by accident.
 
 ### Challenges we ran into
 
 - **No product-data API.** With PA-API / RapidAPI / RainForest unavailable, I built a
   two-layer detection pyramid from raw HTTP signals and stealthy page parsing, and made
   "I can't tell" a first-class, honest verdict (`needs_human_recheck`).
-- **A write-back agent is dangerous.** Letting an LLM edit live content demanded real
+- **A write-back agent is dangerous.** Letting an LLM edit your content demanded real
   guardrails: snapshot-before-write in a single transaction, four steering policies, a
   decision-id write gate, and a `verify_fix` re-probe that rolls back on failure.
 - **Interrupt without blocking a nightly run.** Strands' Interrupt maps to two tracks — a
@@ -182,8 +183,9 @@ the inbox stays deliberately minimal — one screen, not a suite.
 - **Repo:** https://github.com/tomyuya/everlink (public, MIT)
 - **Architecture Diagram:** `ARCHITECTURE.md` in the repo (also uploaded to Devpost's
   separate diagram field)
-- **Live demo:** https://everlink-seven.vercel.app — read-only public deployment
-  (`NEXT_PUBLIC_BOARD_READONLY=1`, decision writes refused with `403`). Reviewer path:
+- **Live demo:** https://everlink-seven.vercel.app — fully interactive public deployment
+  (approve/reject live; approved cards are executed by the nightly worker against EverLink's
+  own mirror store — source-site DBs stay strictly read-only). Reviewer path:
   `/how-it-works` → `/inbox` (16 pending) → `/inbox?status=rejected` (69, every one carrying
   a reason) → `/audit?event=steering_cancel` (3 rows, filter chip) → `/report` (37 healed).
 - **Demo video:** *(owner: ≤ 5:00, three acts — intro title cards (positioning, principle,

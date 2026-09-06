@@ -91,10 +91,10 @@ flashdeals.today is named but not navigated, to keep the pace).
 ## Shot 6 — 0:57–1:07 · Where to find it · **Presentation**
 
 **On screen:** title card `#resources` — `github.com/tomyuya/everlink` (MIT, self-host
-runbook) and `everlink-seven.vercel.app` (read-only live example), both in display type.
+runbook) and `everlink-seven.vercel.app` (live example), both in display type.
 
 **Voiceover:**
-> "Open source under MIT: **github.com/tomyuya/everlink**. And a live, read-only example:
+> "Open source under MIT: **github.com/tomyuya/everlink**. And a live example:
 > **everlink-seven.vercel.app**."
 
 ---
@@ -144,8 +144,8 @@ problem queue. Both `--dry-run` honesty lines stay in frame.
 
 ## Shot 9 — 2:23–2:43 · The decision inbox · **Design**
 
-**On screen:** the Decision Board `/inbox` — 16 pending cards, read-only notice line
-visible (approve/reject is disabled on the public deployment by design).
+**On screen:** the Decision Board `/inbox` — pending cards with live checkboxes and the
+batch approve/reject bar (the public deployment is fully interactive).
 
 **Voiceover:**
 > "The only screen I open is a minimal approval inbox. Sixteen problem slots wait here —

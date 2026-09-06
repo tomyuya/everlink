@@ -12,16 +12,17 @@ compact decision card **only when a human judgment is actually needed**.
 > Built for the **AWS "Agents for Humans" Hackathon** (Professional Agents track) with
 > the **Strands Agents SDK** and **Amazon Bedrock**.
 
-> **Live demo (read-only):** <https://everlink-seven.vercel.app> — the maintainer's own
+> **Live demo (fully interactive):** <https://everlink-seven.vercel.app> — the maintainer's own
 > deployment, carrying the real nightly patrol output for his three sites (plus labelled
 > seeded-replay cards, so the queue is never empty for a reviewer). Suggested path: the
 > landing page → **`/how-it-works`** (product primer) → **`/inbox`** (decision queue,
 > `?status=` filters) → a card's evidence chain → **`/audit?event=steering_cancel`** (the
 > guardrail firing — one filter away from ~2,000 rows of nightly traffic that keep
 > growing every night, where those 3 rows would otherwise be buried) → **`/report`**.
-> It is served with `NEXT_PUBLIC_BOARD_READONLY=1`, so approve/reject is disabled on the
-> public deployment — the approval flow is demonstrated in the video instead. Your own
-> deployment leaves that flag off and decides for real.
+> Approve/reject is **live**: decide a card and the nightly worker picks it up, running the
+> full gated write path (snapshot → apply → re-probe → rollback-on-failure) against
+> EverLink's own mirror store. Source-site production databases stay strictly read-only
+> either way — that is the whole point of the two-database model below.
 
 **It is not a SaaS.** No sign-up, no hosting, no monthly fee, no multi-tenancy — just code
 you run on your own server. The three sites that appear in this repo (**AethelGem /
@@ -53,7 +54,7 @@ it through environment variables:
 | 5 | A timer | Railway cron `0 3 * * *` (or any schedule) | Triggers the nightly patrol |
 
 `<SITE>` is the key you give your own site (in the examples: `AETHELGEM` / `SANDCART` /
-`HOTDEALS`). Full step-by-step runbook: **[`DEPLOYMENT.md`](DEPLOYMENT.md)**; visual
+`HOTDEALS` — `SANDCART` is the legacy site key of the **FlashDeals** storefront). Full step-by-step runbook: **[`DEPLOYMENT.md`](DEPLOYMENT.md)**; visual
 explainer: the board's **`/how-it-works`** page.
 
 ## The two databases (the key to understanding EverLink)
@@ -348,14 +349,14 @@ across the three production sites:
 |---|---|---|
 | **AethelGem** (Django block content) | 15,795 | component 15,772 · reference 19 · commercial 4 |
 | **hotdeals** (products[] jsonb → amazon) | 7,605 | component 7,602 · reference 2 · commercial 1 |
-| **sandcart** = FlashDeals (flashdeals.today; dropshipping storefront, section product links) | 76 | internal 76 |
+| **FlashDeals** (flashdeals.today; dropshipping storefront, section product links; site key `sandcart`) | 76 | internal 76 |
 | **Total** | **23,476** | component 23,374 · reference 21 · commercial 5 · internal 76 |
 
 Notes on the snapshot:
 
 - `component` slots are product links rendered from a structured source (AethelGem `product_card`/`product_grid` blocks; hotdeals `products[]` asin → region-aware `amazon.{tld}/dp/{asin}`). These are the highest-value link-rot targets.
 - hotdeals' link assets live in `products[]` jsonb, **not** in the article HTML — the content is plain prose with only 3 inline `<a>` links across 1,025 articles.
-- `internal` slots (sandcart = **FlashDeals**, an independent dropshipping storefront) are stored in the source DB as relative `/products/...` paths. The adapter absolutizes them against the site's **configured public origin** (`<SITE>_PUBLIC_ORIGIN` env var — the deployer sets their own; nothing is hardcoded in the repo) so probes hit the real storefront instead of failing the SSRF scheme check. FlashDeals' links are internal product pages, **not** Amazon affiliate URLs (only AethelGem and hotdeals carry amazon.{tld}/dp links). `sandcart` is the maintainer's internal example site key — substitute your own when you deploy.
+- `internal` slots (**FlashDeals** — site key `sandcart` — an independent dropshipping storefront) are stored in the source DB as relative `/products/...` paths. The adapter absolutizes them against the site's **configured public origin** (`<SITE>_PUBLIC_ORIGIN` env var — the deployer sets their own; nothing is hardcoded in the repo) so probes hit the real storefront instead of failing the SSRF scheme check. FlashDeals' links are internal product pages, **not** Amazon affiliate URLs (only AethelGem and hotdeals carry amazon.{tld}/dp links). `sandcart` is the maintainer's internal example site key — substitute your own when you deploy.
 - `protected=0` everywhere is expected: affiliate-disclosure text lives in **site-level fixed components**, which are structurally outside the article-block pool (see `DisclosurePolicy` layer (a)). The disclosure guard still fires on any block that *does* carry disclosure keywords.
 - CSVs are gitignored (production content); only `data/slots_summary.json` is committed.
 
@@ -433,14 +434,14 @@ build`. Workflow, honesty rules, and the PR checklist live in
 ## Security & secrets
 
 - This repo contains **only** `.env.example`. Real `.env`, credentials, and exported data CSVs are gitignored.
-- All source-site database access is **read-only** (`SET default_transaction_read_only = on` after connect). Write-back happens only through the agent's gated Writer path, and only to AethelGem block content in the hackathon scope.
+- All source-site database access is **read-only** (`SET default_transaction_read_only = on` after connect). Write-back happens only through the agent's gated Writer path, and it lands in **EverLink's own store** — the `link_slots` mirror row plus a before/after `write_snapshots` audit — **never** in a source site's production database. Hackathon scope: AethelGem slots only (`WRITEBACK_SITES`); every other site is skipped, never silently written.
 - A write guardrail (`db._assert_writable`) refuses any DSN whose host matches a source-site connection var or the `EVERLINK_FORBIDDEN_HOSTS` deny-list — the production Blue-Neon instance can never be written, even by accident.
 - A `gitleaks`-clean check is part of the submission gate (see `SUBMISSION_CHECKLIST.md`).
 
 ## Scope (non-goals)
 
 - Not a commercial product / multi-tenant SaaS / billing.
-- Write-back is AethelGem-only for the hackathon; sandcart/hotdeals write-back is on the roadmap.
+- Write-back scope is AethelGem-only for the hackathon; FlashDeals/HotDeals write-back is on the roadmap. A production-CMS adapter (writing into the source sites themselves instead of EverLink's mirror store) is a deliberate non-goal for this release.
 - No L3 exact-price API integration (none available).
 - The minimal approval inbox is web-only (no mobile app).
 

@@ -48,7 +48,7 @@ _MERCHANT_SEARCH = {
 def extract_slots(site: str, limit: int = 20) -> dict:
     """Discover a site's outbound link slots (READ-ONLY; never writes back).
 
-    A first-party site name (aethelgem/sandcart/hotdeals) reads its CSV snapshot;
+    A first-party site key (aethelgem / sandcart [FlashDeals] / hotdeals) reads its CSV snapshot;
     any other value (a page URL, sitemap URL, or list) uses the generic adapter.
     Returns a count plus up to `limit` example slots.
     """

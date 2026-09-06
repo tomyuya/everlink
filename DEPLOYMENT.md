@@ -85,12 +85,14 @@ npm run build         # next build    -> succeeds with NO database configured
 vercel link           # or connect the Git repo in the Vercel dashboard (root dir = board)
 vercel env add EVERLINK_DATABASE_URL production   # the Neon pooled DSN from Step 1
 vercel env add EVERLINK_FORBIDDEN_HOSTS production # optional deny-list (host fragments)
-vercel env add NEXT_PUBLIC_BOARD_READONLY production  # "1" => public read-only demo view
+vercel env add NEXT_PUBLIC_BOARD_READONLY production  # OPTIONAL: "1" = look-but-don't-touch public view (the live demo leaves this OFF)
 vercel --prod
 ```
 
-* **Public demo link** (spec §7 line 244): set `NEXT_PUBLIC_BOARD_READONLY=1` on a deployment to
-  serve a login-free, look-but-don't-touch inbox so judges never hit an empty/locked state.
+* **Public demo link** (spec §7 line 244): the live demo runs **fully interactive** — reviewers
+  approve/reject for real, and approved cards are executed by the nightly worker against
+  EverLink's own mirror store (source-site DBs stay read-only). Set
+  `NEXT_PUBLIC_BOARD_READONLY=1` only if you prefer a login-free, look-but-don't-touch view.
 * The board reads `decisions / slot_checks / audit_log / link_slots` and renders the inbox, the
   audit stream, and the `/report` page (the weekly numbers `everlink report` mirrors).
 

@@ -11,7 +11,7 @@
 1. **代理必须先活**：v2rayN（`D:\d36j0t1v\v2rayN\v2rayN.exe`）必须已启动且连上节点；验证 `python d:\qcoder\_proxy_check.py` 输出 `LISTENING`。**刚启动后节点需热身**——第一次导航 vercel.app 可能超时，重试即通。
 2. **board 用生产地址** `https://everlink-seven.vercel.app`（禁 localhost）。**收件箱在 `/inbox`**（`/` 已是品牌落地页，不含卡片），录前导航一次 `/inbox` 确认 `Inbox · EverLink Board` 标题与 16 张 pending 卡出现。
    **录前预热**：`python d:\qcoder\_demo_warm.py`（2 轮 × 16 条 board/外站 URL）→ round 2 全 200 即通过；round 1 偶发 `ConnectError` 是代理隧道冷抖动（09-05 实测第二轮全绿），以 round 2 为准。Vercel 冷启动首航会报 10s 超时（其实内容已渲染），预热后录制时才秒开。
-   **只读部署（09-05 起）**：生产 board 已设 `NEXT_PUBLIC_BOARD_READONLY=1`——`/inbox` 的勾选框与批量条、卡片上的 approve/reject 按钮统一换成 `Read-only view — decisions are disabled on this deployment.` 提示行，API 写操作返回 403。理由：匿名评委若点了 approve，下一次 Railway nightly 的 worker 会真去改 AethelGem 线上内容；只读同时也把"只展示已落库结果、不现场点击"的口径变成平台强制。二遍演练 DOM 实测：`/inbox` 的 `input`/`button` 数均为 **0**，只读提示存在，16/37/69 计数不变。
+   **开放部署（09-06 起）**：生产 board 已移除 `NEXT_PUBLIC_BOARD_READONLY`——`/inbox` 的勾选框与批量条、卡片页的 approve/reject 按钮全部真实可用，API 写操作放行。理由：完整开放让评委看到全貌闭环（approve → nightly worker 执行 → 写入 EverLink 自有镜像库 + 快照 + 复验 + 失败回滚），不再碎片化展示；源站生产库仍严格只读，任何批准都不会改到源站内容。（历史注：09-05 曾短暂设只读 403，该状态已废弃；当时的 DOM 实测记录不再适用。）
 3. **Judge 模式定档（2026-09-05 本地实测通过）**：默认 `--judge mantle` 录 Shot 8，字幕用 **[REAL]**（真实 LLM 调用，qwen via Bedrock Mantle 网关）。本地 `--limit 6` 实测 **39s / rc=0**，结构可复现（同 slot、同 `REWRITE_SENTENCE`、5 healthy + 1 offer_changed、steering 0 blocked、2 tool calls、1 决策卡），措辞每次不同属正常。
    **本地 mint 前置条件**：走 `~/.aws/credentials` 的 `[default]`；`.env` 里**绝不能有空值的 `AWS_ACCESS_KEY_ID=` / `AWS_SECRET_ACCESS_KEY=` / `AWS_PROFILE=` 行**——空串会遮蔽共享凭据文件，mint 直接报 `Failed to mint Bedrock Mantle bearer token`（09-05 已把这三行注释掉；`.env` 若重建须复查）。备选路径：`BEDROCK_MANTLE_API_KEY`（console 铸的 key，直作 OpenAI api_key）。直连 Claude 工单若批了可选 `--judge bedrock`；当晚都不可用才退回 `--judge stub` + 文末 **ALT cue**（诚实优先，不许嘴替）。
 4. **数字复核（以屏幕实况为准，2026-09-05 复探）**：23,476（`data/slots_summary.json` 未变）；board 实况 **pending 16 / applied 37 / rejected 69 / healed 37**——69 条 rejected = 4 人工typed驳回 + 54 条 nightly recheck 误报退役 + 11 条 09-05 系统去重驳回，全部带理由落库；audit 全量 **steering_cancel 3 / write 38 / verify 38 / rollback 1 / dead_letter 1**（事件名是 write/verify，不存在 apply）；evals cards 41（fixture 语境）。`[REAL]`/`[SEEDED REPLAY]`/`[EST.]` 角标照 DEMO_SCRIPT 三标签执行。
@@ -221,7 +221,7 @@ S12 report   https://everlink-seven.vercel.app/report         (Links healed 37)
 | notify `--brief` | 实测 **2s / 7.5s**；18 slots / 16 cards / 晨报含 inbox 深链 / "nothing sent" |
 | evals `--full --trace` | 三次实测 **19s / 20.5s / 22s**；OVERALL PASS（50/50、0、三项 100%、cards 41） |
 | generic blog.python.org | 两次实测 **10s / 58.3s**；8/8 healthy + dry-run 行 |
-| 只读部署 DOM | `/inbox` 的 `input`/`button` 均 0、只读提示行存在；API 写操作 403 |
+| 开放部署 DOM（09-06 起） | `/inbox` 勾选框/批量条、卡片页 approve/reject 按钮真实可用；API 写操作放行；写入仅落 EverLink 镜像库 |
 | 已修的产品问题 | ① notify 把 board 根 URL 当收件箱链接 → `_deep_link()` 深链 `/inbox`（子路径部署不追加，1 条断言守住）；② evals 屏幕 note 过期（`--judge bedrock`）→ 改 mantle 并补 `_make_judge()`/argparse 的 mantle 分支（此前该 flag 不存在）；③ 测试数 311 → 312，DEVPOST/README/SUBMISSION_CHECKLIST 已同步 |
 | 已知坑 | Qoder 崩溃会带走 Browser view（navigate 唤醒）与代理（_start_proxy.py 拉起）；节点刚起时 vercel.app 首航超时须重试；hotdeals 导航工具超时但页面会渲染；audit 事件名是 write/verify/rollback/dead_letter（**不存在 apply**）；列表页为客户端渲染，httpx 探针只见空壳，画面内容以 Browser DOM 核验；cmd 单个 `&` 是异步执行；管道/重定向捕获 Python 输出按 cp936 会把 em dash/箭头变 `??`（**仅捕获假象**，IDE 终端 Unicode 直写画面正常，不要为此改命令） |
 

@@ -35,10 +35,10 @@ click submit on Devpost). Those stay open by design and are the last mile.
 - [ ] (owner) **5. AWS Builder ID** — registered, and **$200 credits** claimed.
 - [x] **6. Live demo link** *(bonus)* — **https://everlink-seven.vercel.app** (Vercel board +
       Neon Postgres + Railway nightly cron; scaffold pf1 · `9f05e30`, seed dataset pf2 ·
-      `723668b` keeps the inbox non-empty). Served **read-only**
-      (`NEXT_PUBLIC_BOARD_READONLY=1` → decision writes refused `403`), so an anonymous
-      reviewer can never approve a fix that the nightly worker would then apply to live
-      content. Public pages: `/` landing · `/how-it-works` primer · `/inbox` (`?status=`) ·
+      `723668b` keeps the inbox non-empty). **Fully interactive**: an anonymous reviewer can
+      approve/reject any pending card for real; the nightly worker executes approved cards
+      through the gated Writer path against EverLink's own mirror store — source-site
+      production DBs stay strictly read-only. Public pages: `/` landing · `/how-it-works` primer · `/inbox` (`?status=`) ·
       `/decision/[id]` evidence chain · `/audit` (`?event=`) · `/report`.
       - [ ] (owner) paste the URL into Devpost's live-demo field.
 - [ ] (owner) **7. builder.aws.com blog post** *(bonus)* — title **must contain "Agents for

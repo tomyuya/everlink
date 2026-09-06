@@ -581,7 +581,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sc = sub.add_parser("scan", help="discover + detect link rot (read-only); optionally judge fixes")
     sc.add_argument("--site", required=True,
-                    help="first-party site name (aethelgem/sandcart/hotdeals) OR any URL/sitemap")
+                    help="first-party site key (aethelgem / sandcart [FlashDeals] / hotdeals) OR any URL/sitemap")
     sc.add_argument("--limit", type=int, default=25, help="max slots to scan (default 25)")
     sc.add_argument("--rate-delay", type=float, default=1.0, help="seconds between requests")
     sc.add_argument("--timeout", type=float, default=15.0)
