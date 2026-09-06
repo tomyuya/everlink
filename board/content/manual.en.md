@@ -278,6 +278,7 @@ Start at **A** and work down; each step is a little more "real" than the last. S
 | `BEDROCK_MANTLE_REASONING` | optional | `reasoning_effort`; empty by default; set (e.g. `low`) only when switching to a reasoning model, accepting its multi-turn limits |
 | `EVERLINK_NIGHTLY_SITES` | optional | default `aethelgem,sandcart,hotdeals` (the demo sample sites) |
 | `EVERLINK_WEEKLY_DAY` | optional | weekday the weekly digest folds into the nightly; default `mon` |
+| `EVERLINK_CRON_ORIGIN` | optional | `railway` = attribute ledger rows to the platform even if Railway's own `RAILWAY_*` vars are absent. The board counts ONLY `[railway]` rows as proof the cron is wired (`nightly.run_origin`), so a laptop rehearsal can never unlock *Run now* |
 | `EVERLINK_FORBIDDEN_HOSTS` | optional | extra write deny-list (host fragments) |
 | `RESEND_API_KEY` / `RESEND_FROM` / `EVERLINK_NOTIFY_EMAIL` | email push | **all three** must be set for the email channel to be active; otherwise delivery is honestly `skipped` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | optional | second push channel |
@@ -490,12 +491,18 @@ exactly what a cron wants).
    Deploy from GitHub repo → confirm Dockerfile builder → set Variables (§3.1 table).
 2. **Cron MUST be set manually in the Dashboard** (the biggest trap of this project, §8 trap 1):
    Service → **Settings** →
-   - `Cron Schedule` = Custom = `0 3 * * *` (03:00 UTC)
+   - `Cron Schedule` = Custom = `0 * * * *` (hourly heartbeat)
    - `Restart Policy` = **Never**
    - `Custom Start Command` = `python scripts/nightly.py`
+   - optional Variable `EVERLINK_CRON_ORIGIN=railway` (see §3.1)
    After saving, the page shows the next run time.
-   > This production instance was configured exactly this way on 2026-09-06
-   > (`nextCronRunAt` non-null = acceptance passed).
+   > The GATE, not the schedule, decides when the chain runs: an hourly cron logs ~23 honest
+   > heartbeat skips a day and runs the chain only on the fire matching the board's run hour —
+   > which is also what lets `/settings` → *Run now* be picked up within the hour. A daily
+   > schedule set to the run hour (`0 3 * * *`) runs the chain as well, but leaves *Run now*
+   > locked and the heartbeat precondition red for 23h a day. This production instance is
+   > still on the daily `0 3 * * *` (`nextCronRunAt` 2026-09-07T03:00:00Z) — switching it to
+   > hourly in the Dashboard is the one remaining manual step.
 3. Trigger the chain by hand (without waiting for cron):
    ```bash
    railway run python scripts/nightly.py --dry-run --judge none   # safe rehearsal
@@ -506,8 +513,11 @@ exactly what a cron wants).
 - `railway.json` is config-as-code (deprecated, supported until 2026-12-01): it applies to
   **that deployment only and never writes back to service settings**. The cronSchedule in
   the repo never took effect historically — the scheduler only honours Dashboard settings.
-- Before cron was configured, **every deployment also ran one nightly** (notify included);
-  plan pushes accordingly.
+- Before cron was configured, **every deployment also ran one nightly** (notify included).
+  Once cron IS configured a deployment is `buildOnly`: it rebuilds the image and starts
+  nothing, and the next cron fire runs on that newest image. Verified 2026-09-06 — push at
+  09:17:52Z, deploy `bd57dc6b` SUCCESS at 09:17:55Z with `buildOnly: true`, and no new
+  `nightly_runs` row. So push-to-deploy is safe after the schedule is set.
 
 **First-party scan data**: `data/slots_*.csv` are committed and `COPY`-baked into the image,
 so a repo-based build patrols the demo sample slots out of the box. If your fork must not
@@ -576,13 +586,13 @@ existing risk-vs-benefit decision).
 
 | Page | What to look at |
 |---|---|
-| `/` | the ONE product page: positioning badges (open-source MIT / self-hosted / not-a-SaaS), the six-stage pipeline, the automation panel with its live schedule + heartbeat state, the two feed paths, the write-safety boundary + deployer contract. (`/how-it-works` was merged into it and now 308-redirects.) |
+| `/` | the ONE product page: the four positioning badges (open-source MIT / self-hosted, not a SaaS / AWS Strands SDK + Bedrock / zero-config crawl of any site), the six-stage pipeline, the automation panel with its live schedule and the newest ledger run quoted verbatim — trigger and origin included, so a laptop rehearsal cannot be read as an unattended cron run — the two feed paths, the write-safety boundary + deployer contract. (`/how-it-works` was merged into it and now 308-redirects.) |
 | `/docs` | this manual (English; `/docs/zh` for Chinese) |
 | `/inbox` | the review battlefield: status tabs + checkboxes + batch Approve/Reject bar |
 | `/decision/<id>` | one card: rationale, NEW SENTENCE, evidence chain (slot-level L1/L2), live Approve/Reject buttons (pending) or settled notice (decided) |
 | `/audit` | full audit stream, filterable (`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…) |
 | `/report` | weekly numbers (healed / created / decided), twin of CLI `report` |
-| `/settings` | the control plane: rotation cycle + per-site coverage/budget, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat), precondition checklist, cron ledger |
+| `/settings` | the control plane: rotation cycle + per-site coverage/budget, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat attributable to Railway — the ledger tags every row with its origin, so a run started on a laptop does not count), precondition checklist, cron ledger with an origin column |
 
 ### 7.2 Review workflow
 
@@ -608,7 +618,7 @@ existing risk-vs-benefit decision).
 | 1 | **Railway cron ignores railway.json** | no nightly at 03:00, `nextCronRunAt: null` | config-as-code applies per-deployment only, never writes back to service settings (deprecated) | set Cron Schedule / Restart / Start Command in Dashboard → Settings; verify via `railway status --json` |
 | 2 | **NEXT_PUBLIC_ inlined at build** | removed the readonly env but buttons still grey | Vercel bakes `NEXT_PUBLIC_*` into JS at build | rebuild after env change (push or Redeploy) |
 | 3 | **Double quotes in Railway env** | build fails: `secret ID missing for ""` | Railpack parses an empty-named variable | no `"` in names or values |
-| 4 | **Deploy runs a nightly** | "unexpected" notification after a push | Railway executes the start command once per deployment | accept it (free catch-up run) or time pushes |
+| 4 | **Deploy runs a nightly — only BEFORE cron is set** | "unexpected" notification after a push | with no cron schedule Railway treats the service as a long-running one and executes the start command on deploy; once cron IS set the deploy is `buildOnly` and starts nothing (verified 2026-09-06, deploy `bd57dc6b`) | before cron: accept it (free catch-up run) or time pushes; after cron: nothing to do |
 | 5 | **Relative internal links misfire** | whole site `needs_human_recheck` | scheme-less URLs rejected by the SSRF guard | set `<SITE>_PUBLIC_ORIGIN` |
 | 6 | **Bot-wall verdict flapping** | same card healthy↔offer_changed minutes apart | Amazon et al. serve good/bad pages alternately to datacenter IPs | `recheck --confirm 3`; UNSTABLE cards stay for humans |
 | 7 | **railway logs stuck in `more`** | terminal frozen at `-- More --` | Windows pager | run in background or query DB / `railway status --json` |

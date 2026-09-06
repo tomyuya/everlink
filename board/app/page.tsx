@@ -8,7 +8,7 @@ import { AutomationPanel, type ScheduleState } from "@/components/automation-pan
 import { DeployContract } from "@/components/deploy-contract";
 import { OnboardingPaths } from "@/components/onboarding-paths";
 import { Pipeline } from "@/components/pipeline";
-import { cronOverview, getSettings, listAudit } from "@/lib/queries";
+import { cronOverview, getSettings, listAudit, parseLedgerReason } from "@/lib/queries";
 import { relativeTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -83,20 +83,29 @@ async function readLiveState(): Promise<{
     // failure there must not throw away the schedule we did manage to read.
     const overview = await cronOverview().catch(() => null);
     const lastRun = overview?.last_run ?? null;
+    // Quoted straight from the ledger row, trigger AND origin included, so
+    // "33m ago · ok · --force · local" can never be read as an unattended cron
+    // run. The origin tag is what nightly.py's run_origin() recorded about the
+    // process that wrote the row — not a guess made here afterwards.
+    const tagged = lastRun ? parseLedgerReason(lastRun.reason) : null;
     schedule = {
       runHourUtc: settings.run_hour_utc,
       cycleDays: settings.rotation_cycle_days,
       enabled: settings.enabled,
-      // Quoted straight from the ledger row, trigger included: "33m ago · ok ·
-      // --force" cannot be mistaken for an unattended cron run.
-      lastRun: lastRun
-        ? {
-            label: `${relativeTime(lastRun.started_at)} · ${lastRun.status}${
-              lastRun.reason ? ` · ${lastRun.reason}` : ""
-            }`,
-            ok: lastRun.status === "ok",
-          }
-        : null,
+      lastRun:
+        lastRun && tagged
+          ? {
+              label: [
+                relativeTime(lastRun.started_at),
+                lastRun.status,
+                tagged.text,
+                tagged.origin === "unknown" ? "untagged" : tagged.origin,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              ok: lastRun.status === "ok",
+            }
+          : null,
     };
   } catch {
     /* Control plane not migrated yet: documentation-only panel. */

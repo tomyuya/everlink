@@ -159,6 +159,8 @@ export interface NightlyRunRow {
   id: number;
   kind: "run" | "heartbeat";
   status: string;
+  /** `[origin] verdict`, tagged by nightly.py's `tag_reason`. Parse it with
+   * `parseLedgerReason` — rows written before tagging carry no prefix. */
   reason: string | null;
   started_at: string;
   finished_at: string | null;
@@ -174,8 +176,9 @@ export interface NightlyRunRow {
 export interface CronOverview {
   runs: NightlyRunRow[];
   fires: NightlyRunRow[];
-  /** Newest CRON-driven fire. A manual `--force` row is excluded: it proves the
-   * chain works, not that the Railway cron is wired. */
+  /** Newest RAILWAY-tagged fire. A row started on a laptop — or written before
+   * origin tagging existed — is excluded: it proves the chain works, not that the
+   * Railway cron is wired. */
   last_fire_at: string | null;
   /** `last_fire_at` falls inside HEARTBEAT_WINDOW_MIN. */
   heartbeat_alive: boolean;

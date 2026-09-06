@@ -9,7 +9,8 @@ import {
 
 import { SettingsPanel } from "@/components/settings-panel";
 import { isConfigured } from "@/lib/db";
-import { cronOverview, getSettings, rotationCoverage } from "@/lib/queries";
+import { cronOverview, getSettings, parseLedgerReason, rotationCoverage } from "@/lib/queries";
+import type { LedgerOrigin } from "@/lib/queries";
 import type { BoardSettings, CronOverview, NightlyRunRow, RotationRow } from "@/lib/types";
 import { formatDateTime, safeJsonParse } from "@/lib/utils";
 
@@ -22,6 +23,39 @@ export const metadata: Metadata = {
 /** The control-plane tables the agent's ensure_schema creates on first connect. */
 function isSchemaMissing(message: string): boolean {
   return /does not exist|undefined_table|relation/i.test(message);
+}
+
+/** Honest wording for the heartbeat precondition — including when it is RED.
+ *
+ * A row only proves the Railway cron is wired when nightly.py tagged it as such;
+ * a bare local run is otherwise indistinguishable in the ledger. So the red case
+ * reports what the rows ARE tagged with rather than asserting who ran them.
+ */
+function heartbeatDetail(overview: CronOverview | null): string {
+  if (!overview) return "the ledger could not be read";
+  if (overview.last_fire_at) {
+    return `last Railway fire ${formatDateTime(overview.last_fire_at)}`;
+  }
+  if (overview.fires.length === 0) return "no fire recorded yet";
+  return `no Railway fire recorded — the ${overview.fires.length} newest ledger row${
+    overview.fires.length === 1 ? "" : "s"
+  } are tagged local, or predate origin tagging`;
+}
+
+/** "untagged" reads better than "unknown" for a row written before tagging existed. */
+function originLabel(origin: LedgerOrigin): string {
+  return origin === "unknown" ? "untagged" : origin;
+}
+
+/** A ledger reason is `[origin] verdict` — show the verdict, then name who started it. */
+function TriggerText({ reason }: { reason: string | null }) {
+  const { origin, text } = parseLedgerReason(reason);
+  return (
+    <>
+      {text || "—"}{" "}
+      <span className="text-zinc-400 dark:text-zinc-500">({originLabel(origin)})</span>
+    </>
+  );
 }
 
 export default async function SettingsPage() {
@@ -115,14 +149,8 @@ export default async function SettingsPage() {
               <PreconditionRow
                 ok={pre.heartbeatAlive}
                 icon={<Timer className="h-4 w-4" />}
-                label="Cron heartbeat alive (a cron fire within 75 min)"
-                detail={
-                  overview?.last_fire_at
-                    ? `last cron fire ${formatDateTime(overview.last_fire_at)}`
-                    : overview?.fires.length
-                      ? `no cron fire inside the window — the ${overview.fires.length} newest ledger rows are manual/local runs`
-                      : "no fire recorded yet"
-                }
+                label="Cron heartbeat alive (a Railway fire within 75 min)"
+                detail={heartbeatDetail(overview)}
               />
             </ul>
             {!pre.heartbeatAlive && (
@@ -132,11 +160,19 @@ export default async function SettingsPage() {
                   <li>Cron Schedule = Custom = <code className="font-mono">0 * * * *</code> (hourly heartbeat)</li>
                   <li>Restart Policy = <code className="font-mono">Never</code></li>
                   <li>Custom Start Command = <code className="font-mono">python scripts/nightly.py</code></li>
+                  <li>
+                    Variable <code className="font-mono">EVERLINK_CRON_ORIGIN=railway</code>{" "}
+                    — optional, but it makes every fire attributable if Railway&apos;s own{" "}
+                    <code className="font-mono">RAILWAY_*</code> variables are absent, which is
+                    what turns this row green
+                  </li>
                 </ul>
                 <p className="mt-1.5">
                   Until then the legacy daily 03:00 UTC fire still runs the chain once a
                   day (the gate honours it), but <em>Run now</em> stays locked — nothing
-                  would consume the request. Push-deploy fires are harmless heartbeats.
+                  would consume the request. A git push rebuilds the cron image but does
+                  not start it (Railway reports the deploy as <code>buildOnly</code>), so
+                  deploys never fire the chain; only the cron schedule does.
                 </p>
               </div>
             )}
@@ -167,7 +203,7 @@ export default async function SettingsPage() {
                     {overview.last_run.status}
                   </span>
                   {runDuration(overview.last_run)} · trigger{" "}
-                  {overview.last_run.reason ?? "—"}
+                  <TriggerText reason={overview.last_run.reason} />
                   {runBudgets(overview.last_run.summary) && (
                     <> · budget {runBudgets(overview.last_run.summary)}</>
                   )}
@@ -184,6 +220,7 @@ export default async function SettingsPage() {
                 <tr className="border-b border-zinc-200 dark:border-zinc-800">
                   <th className="py-1 pr-3 font-medium">started (UTC)</th>
                   <th className="py-1 pr-3 font-medium">kind</th>
+                  <th className="py-1 pr-3 font-medium">origin</th>
                   <th className="py-1 pr-3 font-medium">status</th>
                   <th className="py-1 pr-3 font-medium">duration</th>
                   <th className="py-1 font-medium">reason / trigger</th>
@@ -194,6 +231,9 @@ export default async function SettingsPage() {
                   <tr key={r.id} className="border-b border-zinc-100 dark:border-zinc-800/60">
                     <td className="py-1 pr-3 font-mono">{formatDateTime(r.started_at)}</td>
                     <td className="py-1 pr-3">{r.kind}</td>
+                    <td className="py-1 pr-3 text-zinc-400 dark:text-zinc-500">
+                      {originLabel(parseLedgerReason(r.reason).origin)}
+                    </td>
                     <td className="py-1 pr-3">
                       <span
                         className={
@@ -212,12 +252,14 @@ export default async function SettingsPage() {
                         ? `${Math.max(0, Math.round((new Date(r.finished_at).getTime() - new Date(r.started_at).getTime()) / 1000))}s`
                         : "…"}
                     </td>
-                    <td className="py-1">{r.reason ?? ""}</td>
+                    <td className="py-1">
+                      {parseLedgerReason(r.reason).text}
+                    </td>
                   </tr>
                 ))}
                 {(overview?.runs.length ?? 0) === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-2 text-zinc-400">
+                    <td colSpan={6} className="py-2 text-zinc-400">
                       No cron fire recorded yet — the ledger fills on the first fire
                       after this schema lands.
                     </td>

@@ -362,19 +362,42 @@ export async function requestRun(by: string): Promise<BoardSettings> {
   return next;
 }
 
-/** Reasons `nightly.py` records when a HUMAN bypassed the schedule gate.
+/** A ledger row's `reason` is `[origin] verdict` — written by nightly.py's `tag_reason`.
  *
- * Such a row proves the chain works; it says nothing about whether the Railway
- * cron is wired. Counting it as a heartbeat let one local `--force` rehearsal
- * keep /settings and the landing page claiming "heartbeat alive" for the whole
- * 75-minute window — observed in production on 2026-09-06, when the ledger held
- * three manual rows and zero cron fires.
+ * Why the tag exists: without it a bare `python scripts/nightly.py` on a laptop
+ * writes a row byte-identical to a Railway cron fire, and /settings duly reported
+ * one such rehearsal as "last cron fire 2026-09-06 08:13:15" while the real cron
+ * had never fired once. Filtering on trigger text (`--force`) only ever caught the
+ * rows that admitted to being manual; attribution has to come from the process
+ * that wrote the row, not from a guess made afterwards.
+ *
+ * Untagged rows (written before the tag landed) parse to origin "unknown" and are
+ * NOT counted as fires: liveness fails towards "not proven", never towards a false
+ * green that would unlock Run now on the strength of a laptop rehearsal.
  */
-const MANUAL_TRIGGERS = new Set(["--force", "no-DB (offline smoke)"]);
+export type LedgerOrigin = "railway" | "local" | "unknown";
 
-/** True when a ledger row could only have come from an actual cron fire. */
+export interface LedgerReason {
+  origin: LedgerOrigin;
+  /** The verdict with the machine tag stripped — what a human should read. */
+  text: string;
+}
+
+const ORIGIN_TAG = /^\[(railway|local)\]\s*/i;
+
+export function parseLedgerReason(reason: string | null | undefined): LedgerReason {
+  const raw = (reason ?? "").trim();
+  const match = ORIGIN_TAG.exec(raw);
+  if (!match) return { origin: "unknown", text: raw };
+  return {
+    origin: match[1].toLowerCase() as LedgerOrigin,
+    text: raw.slice(match[0].length),
+  };
+}
+
+/** True only for a row the Railway cron itself wrote. */
 function isCronFire(row: NightlyRunRow): boolean {
-  return !MANUAL_TRIGGERS.has((row.reason ?? "").trim());
+  return parseLedgerReason(row.reason).origin === "railway";
 }
 
 /** The cron ledger + liveness: is the Railway heartbeat actually ticking?
@@ -383,7 +406,7 @@ function isCronFire(row: NightlyRunRow): boolean {
  * fires with the newest REAL runs: a fire-only window would push the last full
  * run off the page within hours and /settings could no longer answer "did it
  * run?". `fires` stays fire-only because liveness must count every tick — but
- * only the CRON-driven ones (see isCronFire), never a manual bypass.
+ * only the platform-driven ones (see isCronFire), never a laptop rehearsal.
  */
 export async function cronOverview(): Promise<CronOverview> {
   const sql = getSql();

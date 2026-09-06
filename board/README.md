@@ -29,12 +29,12 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 
 | Route | Purpose |
 | --- | --- |
-| `/` | **Home** — the one product page: hero + positioning badges (open-source MIT / self-hosted / not-a-SaaS), the six-stage pipeline diagram (Scan → Detect → Judge → You decide → Apply → Report), the Automation panel (live schedule, rotation budget, cron heartbeat state, entrypoint commands), the two feed paths, the write-safety boundary + deployer contract, and the dogfooding honesty note. Every DB read is optional, so it renders in full with no DB configured. Absorbed the old `/how-it-works`, which now 308-redirects here. |
+| `/` | **Home** — the one product page: hero + the four positioning badges (open-source MIT / self-hosted, not a SaaS / AWS Strands SDK + Bedrock / zero-config crawl of any site), the six-stage pipeline diagram (Scan → Detect → Judge → You decide → Apply → Report), the Automation panel (live schedule, rotation budget, the newest ledger run quoted with its trigger + origin, entrypoint commands), the two feed paths, the write-safety boundary + deployer contract, and the dogfooding honesty note. Every DB read is optional, so it renders in full with no DB configured. Absorbed the old `/how-it-works`, which now 308-redirects here. |
 | `/inbox` | **Inbox** — the working queue: filterable card list (pending/approved/applied/rejected/all) with multi-select + **batch approve/reject**; `?status=` deep-links each filter tab. |
 | `/decision/[id]` | **Card detail** — the proposal, its rationale, and the full **evidence chain** (slot → L1 HTTP probe → redirect chain → L2 verdict → final verdict), plus single-card approve/reject. |
 | `/audit` | **Audit trail** — the append-only `audit_log`, newest first. `?event=<type>` filters to one event type (e.g. `?event=steering_cancel`, `write`, `verify`, `rollback`, `dead_letter`) with a filter chip showing the row count and a *clear filter* link — the log outgrows the page window once nightly `tool_result` traffic piles up. |
 | `/report` | **Weekly report** — live aggregates (links healed, slots fixed, decisions by status/action, audit events) over a 7/14/30-day window. pe3's scheduled digest reports these same numbers. |
-| `/settings` | **Control plane** — rotation cycle + per-site coverage/daily-budget table, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat proves the Railway wiring), the precondition checklist with the one-time Railway steps, and the cron ledger. |
+| `/settings` | **Control plane** — rotation cycle + per-site coverage/daily-budget table, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat proves the Railway wiring — every ledger row is tagged with its origin by `nightly.run_origin`, so a run started on a laptop cannot unlock it), the precondition checklist with the one-time Railway steps, and the cron ledger with its origin column. |
 
 ## API routes
 

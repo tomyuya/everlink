@@ -113,10 +113,13 @@ CREATE TABLE IF NOT EXISTS nightly_runs (
   id BIGSERIAL PRIMARY KEY,
   kind TEXT NOT NULL,                  -- run | heartbeat
   status TEXT NOT NULL,                -- running | ok | degraded | fail | skipped
-  reason TEXT,                         -- gate verdict / trigger note
+  reason TEXT,                         -- "[origin] verdict"; origin = railway | local
+                                       -- (nightly.run_origin). The board counts ONLY
+                                       -- [railway] rows as proof the cron is wired, so
+                                       -- a laptop rehearsal can never fake a heartbeat.
   started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   finished_at TIMESTAMPTZ,
-  summary TEXT                         -- JSON: trigger, budgets, per-step codes
+  summary TEXT                         -- JSON: trigger, origin, budgets, per-step codes
 );
 CREATE INDEX IF NOT EXISTS idx_runs_started ON nightly_runs(started_at DESC);
 

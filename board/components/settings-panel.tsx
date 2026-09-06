@@ -175,8 +175,10 @@ export function SettingsPanel({
             Schedule &amp; cron
           </h2>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            The Railway cron ticks hourly; the fire matching this hour (UTC) runs the
-            full chain, every other fire logs an honest heartbeat skip.
+            The cron fires as a heartbeat and the gate decides: the fire matching this
+            hour (UTC) runs the full chain, every other fire logs an honest heartbeat
+            skip. An hourly schedule picks up a <em>Run now</em> within the hour; a daily
+            one only at its next fire.
           </p>
           <div className="mt-3 space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
             <label className="flex items-center gap-2">
@@ -221,7 +223,7 @@ export function SettingsPanel({
                 title={
                   pre.heartbeatAlive
                     ? "Ask the next cron fire to run the chain now"
-                    : "Needs a live cron heartbeat (a cron fire within 75 min — a manual --force run does not count)"
+                    : "Needs a live cron heartbeat (a Railway-tagged fire within 75 min — a run started on a laptop does not count)"
                 }
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ring-1 ring-inset ring-zinc-300 hover:bg-zinc-100 disabled:opacity-40 dark:ring-zinc-700 dark:hover:bg-zinc-800"
               >

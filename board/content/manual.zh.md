@@ -261,6 +261,7 @@ python scripts/run_evals.py                                      # Strands Evals
 | `BEDROCK_MANTLE_REASONING` | 可选 | `reasoning_effort`；默认留空；仅当换 reasoning 模型时设（如 `low`）并接受其多轮限制 |
 | `EVERLINK_NIGHTLY_SITES` | 可选 | 默认 `aethelgem,sandcart,hotdeals` |
 | `EVERLINK_WEEKLY_DAY` | 可选 | 周报并入 nightly 的星期几，默认 `mon` |
+| `EVERLINK_CRON_ORIGIN` | 可选 | `railway` = 即使 Railway 自己的 `RAILWAY_*` 变量不在，也能把台账行归因到平台。board 只把 `[railway]` 行当作 cron 已接线的证据（`nightly.run_origin`），所以笔记本上排练一次永远无法解锁 *Run now* |
 | `EVERLINK_FORBIDDEN_HOSTS` | 可选 | 写保护额外 deny-list（host 片段） |
 | `RESEND_API_KEY` / `RESEND_FROM` / `EVERLINK_NOTIFY_EMAIL` | 邮件推送 | **三者齐备**邮件通道才激活，缺一即 `skipped` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选 | 第二推送通道 |
@@ -462,11 +463,16 @@ vercel --prod
    → 确认 Dockerfile builder → 设 Variables（§3.1 全表）。
 2. **Cron 必须在 Dashboard 手工设置**（本会话最大坑，见 §8 坑 1）：
    Service → **Settings** →
-   - `Cron Schedule` = Custom = `0 3 * * *`（UTC 03:00 = 北京 11:00）
+   - `Cron Schedule` = Custom = `0 * * * *`（小时心跳）
    - `Restart Policy` = **Never**
    - `Custom Start Command` = `python scripts/nightly.py`
+   - 可选变量 `EVERLINK_CRON_ORIGIN=railway`（见 §3.1）
    保存后页面应显示下次运行时间。
-   > 本生产实例已于 2026-09-06 按上述三项配置生效（`nextCronRunAt` 有值即验收通过）。
+   > 决定什么时候跑全链路的是**门控**而不是调度本身：小时级 cron 一天写 ~23 条诚实的
+   > heartbeat skip，只有命中 board 跑批小时的那次才跑全链——也正是它让 `/settings` 的
+   > *Run now* 能在一小时内被接走。日级调度设到跑批小时（`0 3 * * *`）同样会跑全链，
+   > 但 *Run now* 会一直锁定、心跳前置条件一天 23 小时是红的。本生产实例目前仍是日级
+   > `0 3 * * *`（`nextCronRunAt` 2026-09-07T03:00:00Z），改成小时级是剩下的唯一手工步骤。
 3. 手工触发一次全链路（不等 cron）：
    ```bash
    railway run python scripts/nightly.py --dry-run --judge none   # 安全演练
@@ -476,7 +482,10 @@ vercel --prod
 **平台行为两条（实测）**：
 - `railway.json` 属 config-as-code（官方弃用中，支持至 2026-12-01）：**只对当次部署生效、
   绝不回写服务设置**。仓库里写的 cronSchedule 历史上从未生效过——调度只认 Dashboard 设置。
-- 设置 cron 前，**每次部署都会顺带跑一次 nightly**（含 notify）；push 前心里有数。
+- 设置 cron 前，**每次部署都会顺带跑一次 nightly**（含 notify）。设置 cron 后部署变成
+  `buildOnly`：只重建镜像、不启动任何容器，下一次 cron fire 跑的就是这个最新镜像。
+  实测于 2026-09-06：09:17:52Z push、deploy `bd57dc6b` 于 09:17:55Z SUCCESS 且
+  `buildOnly: true`，`nightly_runs` 无新行。所以调度设好之后 push 上线是安全的。
 
 **第一方扫描数据**：`data/slots_*.csv` 随仓库提交并 `COPY` 进镜像，开箱即扫 77 个第一方 slot。
 fork 不想带数据进 git 的三个选项：Railway volume 挂 `/app/data`（推荐）/ 私有预构建镜像 /
@@ -538,12 +547,12 @@ board 展示层已有映射；不做物理重命名（风险 > 收益的既有�
 
 | 页面 | 看什么 |
 |---|---|
-| `/` | 唯一产品页：定位三徽章（开源 MIT / 自托管 / 非 SaaS）+ 六阶段流水线 + 自动化面板（实时排程与心跳状态）+ 两种接入路径 + 写入安全边界与部署者契约。（原 `/how-it-works` 已合并至此，308 永久重定向。） |
+| `/` | 唯一产品页：定位四徽章（开源 MIT / 自托管非 SaaS / AWS Strands SDK + Bedrock / 零配置抓取任意站点）+ 六阶段流水线 + 自动化面板（实时排程，以及台账最近一次运行的原样引用——含触发方式与来源，本地排练不会被误读为无人值守的 cron 运行）+ 两种接入路径 + 写入安全边界与部署者契约。（原 `/how-it-works` 已合并至此，308 永久重定向。） |
 | `/inbox` | 审核主战场：状态页签（Pending/Approved/Applied/Rejected/All）+ 勾选框 + 批量 Approve/Reject 条 |
 | `/decision/<id>` | 单卡详情：提案理由、NEW SENTENCE、证据链（slot 级 L1/L2 证据）、Approve/Reject 真按钮（pending 卡）或 settled 提示（已决卡） |
 | `/audit` | 全链路审计流，可按事件过滤（`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…） |
 | `/report` | 周报数字（healed / created / decided），与 CLI `report` 同构 |
-| `/settings` | 控制面：轮换周期与各站覆盖率/日预算、跑批小时（UTC）、cron 总开关、Run now（需先有活的 cron 心跳）、前置条件清单、cron 台账 |
+| `/settings` | 控制面：轮换周期与各站覆盖率/日预算、跑批小时（UTC）、cron 总开关、Run now（需先有活的 cron 心跳，且该心跳必须能归因到 Railway——台账每行都带 origin 标记，笔记本上手动跑一次不算）、前置条件清单、cron 台账（含 origin 列） |
 
 ### 7.2 审核流程
 
@@ -568,7 +577,7 @@ board 展示层已有映射；不做物理重命名（风险 > 收益的既有�
 | 1 | **Railway cron 不认 railway.json** | 凌晨没跑、audit 无新行、`nextCronRunAt: null` | config-as-code 只对该次部署生效、不回写服务设置（已弃用） | Dashboard → Settings 手工设 Cron Schedule / Restart / Start Command；验证 `railway status --json` |
 | 2 | **NEXT_PUBLIC_ 构建期内联** | 删了只读 env 按钮还是灰 | Vercel 把 `NEXT_PUBLIC_*` 在 build 时烤进 JS | 删/改 env 后必须重新构建（push 或 Redeploy） |
 | 3 | **Railway env 含双引号** | 构建报 `secret ID missing for ""` | Railpack 解析空名变量 | 变量名与值都不带 `"` |
-| 4 | **部署顺带跑 nightly** | push 后收到"意外"通知 | Railway 每次部署执行一次 start command | 接受它（=免费补跑）或错峰 push |
+| 4 | **部署顺带跑 nightly（仅在设置 cron 之前）** | push 后收到"意外"通知 | 无 cron 调度时 Railway 把它当普通服务、部署即执行一次 start command；设了 cron 后部署为 `buildOnly`，不启动任何东西（实测 2026-09-06 deploy `bd57dc6b`） | 设 cron 前：接受它（=免费补跑）或错峰 push；设 cron 后：无需处理 |
 | 5 | **相对内链整站误报** | 全站 `needs_human_recheck` | 无 scheme URL 被 SSRF guard 拒 | 设 `<SITE>_PUBLIC_ORIGIN` |
 | 6 | **bot-wall 主机判定抖动** | 同一卡几分钟内 healthy↔offer_changed | Amazon 等对数据中心 IP 交替返回好/坏页 | `recheck --confirm 3` 连续一致才退役；UNSTABLE 留人工 |
 | 7 | **railway logs 被 more 分页卡死** | 终端停 `-- More --` | Windows 分页器 | 后台运行或改查 DB / `railway status --json` |

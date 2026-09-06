@@ -45,11 +45,17 @@ SCHEDULE GATE + ROTATION (the board /settings page is the control plane):
   slots, so one full cycle covers the WHOLE mirror instead of re-probing the
   snapshot head. ``--force`` bypasses the gate for manual triggers.
 
+  Every ledger row carries an ORIGIN tag (``run_origin``) so the board can tell a
+  Railway fire from a human rehearsing on a laptop: without it a bare local run
+  is byte-identical to a cron fire in ``nightly_runs``, and /settings once showed
+  such a rehearsal as "last cron fire" (observed 2026-09-06).
+
 DEPLOY NOTE (verified against Railway on 2026-09-06): a git push builds a new
 image (``buildOnly``) but does NOT start the container — a cron service only
 executes its start command when the cron fires, on the newest built image. So
-push-to-deploy is safe here; the Dashboard cron schedule is the one knob that
-railway.json cannot write back (set it to ``0 * * * *`` once, by hand).
+push-to-deploy is safe here (a push added no ledger row); the Dashboard cron
+schedule is the one knob that railway.json cannot write back (set it to
+``0 * * * *`` once, by hand).
 """
 from __future__ import annotations
 
@@ -68,6 +74,38 @@ DEFAULT_SITES = ("aethelgem", "sandcart", "hotdeals")   # scan all three read-on
 DEFAULT_JUDGE = "mantle"                                # the real nightly uses the LLM judge
 DEFAULT_WEEKLY_DAY = "mon"                               # fold the weekly digest in on Mondays
 LEDGER_KEEP_DAYS = 14                                    # heartbeat rows are kept this long
+
+# Railway injects these into every container IT starts. A laptop running the same
+# command has none of them, which is what makes a ledger row attributable. The
+# explicit override exists so one Dashboard variable can restore attribution if
+# the platform ever renames them — no redeploy, no code change.
+RAILWAY_MARKERS = ("RAILWAY_SERVICE_ID", "RAILWAY_DEPLOYMENT_ID", "RAILWAY_ENVIRONMENT")
+ORIGIN_OVERRIDE = "EVERLINK_CRON_ORIGIN"                 # 'railway' | 'local'
+
+
+def run_origin(env: dict | None = None) -> str:
+    """PURE: 'railway' when the platform started this process, else 'local'.
+
+    Deliberately conservative — an unrecognised environment reports 'local', so
+    the board's liveness check fails towards "not proven" rather than towards a
+    false green.
+    """
+    e = os.environ if env is None else env
+    override = str(e.get(ORIGIN_OVERRIDE) or "").strip().lower()
+    if override in ("railway", "local"):
+        return override
+    return "railway" if any(e.get(k) for k in RAILWAY_MARKERS) else "local"
+
+
+def tag_reason(origin: str, reason: str) -> str:
+    """PURE: ledger reason = ``[origin] verdict``.
+
+    The bracket tag is the machine-readable half (the board strips it for display
+    and only counts ``[railway]`` rows as proof the cron is wired); the verdict
+    stays exactly as human-readable as before. Rows written before this existed
+    carry no tag, so the board treats them as unattributable instead of guessing.
+    """
+    return f"[{origin}] {reason}"
 
 
 @dataclass
@@ -345,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
     conn = None
     run_id: int | None = None
     trigger = ""
+    origin = run_origin()          # who started THIS process: the platform, or a human
 
     # --- schedule gate: an hourly cron fire is usually just a heartbeat -------
     if dsn and not args.force:
@@ -360,9 +399,9 @@ def main(argv: list[str] | None = None) -> int:
                 ran_today=ran_today, run_in_flight=in_flight,
                 hour_utc=int(settings["run_hour_utc"]), now_hour_utc=now.hour)
             if not run_it:
-                db.insert_run(conn, "heartbeat", "skipped", reason)
+                db.insert_run(conn, "heartbeat", "skipped", tag_reason(origin, reason))
                 _prune_ledger(conn)
-                print(f"[nightly] heartbeat skip: {reason} "
+                print(f"[nightly] heartbeat skip: {tag_reason(origin, reason)} "
                       f"(cycle={settings['rotation_cycle_days']}d, "
                       f"hour={settings['run_hour_utc']}:00 UTC, "
                       f"enabled={bool(settings['enabled'])}; board /settings manages this)")
@@ -401,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     if dsn:
         conn = conn or db.connect(dsn)
         db.ensure_schema(conn)
-        run_id = db.insert_run(conn, "run", "running", trigger)
+        run_id = db.insert_run(conn, "run", "running", tag_reason(origin, trigger))
 
     plan = plan_steps(args, budgets=budgets)
     _print_plan(plan, args)
@@ -411,7 +450,7 @@ def main(argv: list[str] | None = None) -> int:
         codes = [r.code for r in results if r.code is not None]
         status = "ok" if ok else ("degraded" if all(c in (0, 2) for c in codes) else "fail")
         db.finish_run(conn, run_id, status,
-                      {"trigger": trigger, "budgets": budgets,
+                      {"trigger": trigger, "origin": origin, "budgets": budgets,
                        "steps": [{"label": r.label, "code": r.code} for r in results]})
         _prune_ledger(conn)
         conn.close()

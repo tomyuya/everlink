@@ -5,22 +5,24 @@ import { CopyButton } from "./copy-button";
 
 /** What the board's control plane can state as FACT on a public page.
  *
- * Deliberately absent: any "heartbeat alive" verdict. Liveness is inferred from
- * the ledger's newest fire, and a fire started by a human running
- * `python scripts/nightly.py` on a laptop is indistinguishable there from a
- * Railway cron fire (only `--force` rows are attributable). Showing that guess
- * here would mislead in BOTH directions — green after one local rehearsal, or
- * "quiet" while a perfectly healthy `0 3 * * *` cron runs every night. The
- * verdict belongs on /settings, where the precondition checklist and the
- * one-time wiring steps give it context. Everything below is read straight from
- * the `settings` row or quoted from a ledger row, so it cannot overclaim.
+ * Deliberately absent: any "heartbeat alive" verdict. Liveness is a 75-minute
+ * window over the ledger's newest Railway-tagged fire, which only means something
+ * next to an HOURLY cron. This deployment's cron is daily (`0 3 * * *`, confirmed
+ * with `railway status`), so that verdict would read "quiet" for 23 hours a day
+ * while the chain is in fact running fine — and until the first tagged fire
+ * exists it can only read red. The verdict belongs on /settings, where the
+ * precondition checklist and the one-time wiring steps give it context.
+ * Everything below is read straight from the `settings` row or quoted from a
+ * ledger row (trigger and origin included), so it cannot overclaim.
  */
 export interface ScheduleState {
   runHourUtc: number;
   cycleDays: number;
   enabled: boolean;
   /** Newest full run, quoted from the ledger (null = empty/unreadable ledger).
-   * `ok` drives the chip tone so a failed run can never render green. */
+   * `ok` drives the chip tone so a failed run can never render green, and the
+   * label carries the row's trigger + origin so a laptop rehearsal is visible as
+   * such on a public page. */
   lastRun: { label: string; ok: boolean } | null;
 }
 

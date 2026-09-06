@@ -10,6 +10,9 @@ no AWS/Bedrock, and no network are touched. What is proven here:
   * site / judge / weekly-day resolution from args AND from the environment
   * ``run_steps`` executes runnable steps via the runner, records skips WITHOUT calling it, and
     captures a raising / SystemExit-ing step as a code without aborting the rest of the chain
+  * ``run_origin`` / ``tag_reason``, which attribute a ledger row to the platform or to a human.
+    That attribution is the only thing stopping a laptop rehearsal from being read as proof the
+    Railway cron is wired, so it is a pure predicate and it fails towards 'local'.
 
 HONESTY: these tests prove the ORCHESTRATION wiring only. They never run a real scan, touch a
 database, call Bedrock, or send a notification — the live full-chain run is a separate,
@@ -261,6 +264,38 @@ def test_plan_steps_explicit_due_without_budgets_keeps_default_limit():
     assert _argv(plan, "scan:sandcart") == [
         "scan", "--site", "sandcart", "--select", "due", "--judge", "mantle",
         "--limit", "25"]
+
+
+# --------------------------------------------------------------------------- #
+# ledger origin tagging — who actually started this fire
+# --------------------------------------------------------------------------- #
+def test_run_origin_reads_platform_markers_not_the_command_line():
+    assert nightly.run_origin({}) == "local"                       # nothing injected => a human
+    assert nightly.run_origin({"RAILWAY_SERVICE_ID": "svc"}) == "railway"
+    assert nightly.run_origin({"RAILWAY_DEPLOYMENT_ID": "d"}) == "railway"
+    assert nightly.run_origin({"RAILWAY_ENVIRONMENT": "prod"}) == "railway"
+    assert nightly.run_origin({"RAILWAY_SERVICE_ID": ""}) == "local"    # empty is absent
+    assert nightly.run_origin({"PATH": "/usr/bin"}) == "local"          # unrelated env
+
+
+def test_run_origin_honours_the_explicit_override_both_ways():
+    """One Dashboard variable restores attribution if Railway renames its own."""
+    override = nightly.ORIGIN_OVERRIDE
+    assert nightly.run_origin({override: "railway"}) == "railway"
+    assert nightly.run_origin({override: "RAILWAY"}) == "railway"          # case-insensitive
+    assert nightly.run_origin({override: " local "}) == "local"            # trimmed
+    assert nightly.run_origin({override: "local",
+                               "RAILWAY_SERVICE_ID": "svc"}) == "local"    # override wins
+    assert nightly.run_origin({override: "nonsense",
+                               "RAILWAY_SERVICE_ID": "svc"}) == "railway"   # nonsense ignored
+    assert nightly.run_origin({override: "nonsense"}) == "local"           # and still conservative
+
+
+def test_tag_reason_keeps_the_verdict_readable_and_machine_parsable():
+    assert nightly.tag_reason("railway", "heartbeat (next run 3:00 UTC)") == \
+        "[railway] heartbeat (next run 3:00 UTC)"
+    assert nightly.tag_reason("local", "--force") == "[local] --force"
+    assert nightly.tag_reason("local", "") == "[local] "                   # never drops the tag
 
 
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
