@@ -90,7 +90,12 @@ function Hero() {
           </span>
           . It only stops at the decision inbox when a fix is risky enough to need a
           human judgment. Everything else heals on its own, on a schedule, and leaves an
-          audit trail.
+          audit trail. Point it at{" "}
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">
+            any sitemap or page URL
+          </span>{" "}
+          &mdash; it crawls read-only over HTTP, so you can start with no database access
+          at all.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
           <Link
@@ -99,6 +104,9 @@ function Hero() {
           >
             Review decisions
           </Link>
+          <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            Works with any site · zero-config crawl
+          </span>
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
             Built on AWS Strands SDK + Bedrock
           </span>

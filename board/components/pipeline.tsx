@@ -16,6 +16,8 @@ interface Stage {
   icon: ReactNode;
   title: string;
   desc: string;
+  /** One-glance requirement/output line: what this step needs (or writes). */
+  meta?: string;
   /** Where this stage is visible on the board (makes the tabs one loop, not fragments). */
   href?: string;
   hrefLabel?: string;
@@ -27,22 +29,26 @@ const STAGES: Stage[] = [
   {
     icon: <Radar className="h-4 w-4" />,
     title: "Scan",
-    desc: "Crawl first-party pages and inventory every outbound link slot.",
+    desc: "Inventories every outbound link slot — from a zero-config read-only crawl of any sitemap/page (the default) or a first-party CSV snapshot.",
+    meta: "needs: just a URL · no DB, no creds",
   },
   {
     icon: <Activity className="h-4 w-4" />,
     title: "Detect",
-    desc: "Probe HTTP status + redirect chain (L1), then selectively fetch & read the page (L2).",
+    desc: "L1 probes HTTP status + redirect chain; L2 reads the page only when L1 is unsure. Blocked/timed-out links are honestly flagged, never guessed.",
+    meta: "needs: no LLM · zero credentials",
   },
   {
     icon: <Sparkles className="h-4 w-4" />,
     title: "Judge",
-    desc: "A Strands agent on AWS Bedrock proposes the safest fix and scores its risk.",
+    desc: "A Strands agent on AWS Bedrock proposes the safest fix and scores its risk; steering guardrails block unsafe proposals.",
+    meta: "needs: an LLM (optional)",
   },
   {
     icon: <Inbox className="h-4 w-4" />,
     title: "You decide",
-    desc: "Only fixes risky enough to need a human land here as cards. Approve or reject.",
+    desc: "Only fixes risky enough to need a human surface as cards. Approve or reject — a rejection reason is remembered by the agent.",
+    meta: "needs: a human · the only mandatory human step",
     href: "/inbox",
     hrefLabel: "Inbox",
     highlight: true,
@@ -50,12 +56,14 @@ const STAGES: Stage[] = [
   {
     icon: <Wrench className="h-4 w-4" />,
     title: "Apply",
-    desc: "The worker snapshots, writes the approved fix, then verifies it took.",
+    desc: "The worker snapshots, writes the approved fix, then re-probes to verify it took; on failure it rolls back and dead-letters the card.",
+    meta: "writes: EverLink's own DB only · never your source",
   },
   {
     icon: <BarChart3 className="h-4 w-4" />,
     title: "Report",
-    desc: "Every step is appended to the audit trail and folded into the weekly digest.",
+    desc: "Every step is appended to the audit trail; the weekly digest folds the same numbers the board shows.",
+    meta: "needs: nothing extra",
     href: "/report",
     hrefLabel: "Report",
   },
@@ -116,6 +124,11 @@ export function Pipeline() {
               <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
                 {s.desc}
               </p>
+              {s.meta ? (
+                <p className="font-mono text-[10px] leading-snug text-zinc-400 dark:text-zinc-500">
+                  {s.meta}
+                </p>
+              ) : null}
               {s.href ? (
                 <Link
                   href={s.href}

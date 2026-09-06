@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpen, House, Inbox, ScrollText } from "lucide-react";
+import { BarChart3, BookOpen, FileText, House, Inbox, ScrollText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
@@ -10,6 +10,7 @@ import { ThemeToggle } from "./theme-toggle";
 const LINKS = [
   { href: "/", label: "Home", icon: House, exact: true },
   { href: "/how-it-works", label: "How it works", icon: BookOpen, exact: false },
+  { href: "/docs", label: "Docs", icon: FileText, exact: false },
   { href: "/inbox", label: "Inbox", icon: Inbox, exact: false },
   { href: "/audit", label: "Audit", icon: ScrollText, exact: false },
   { href: "/report", label: "Report", icon: BarChart3, exact: false },
