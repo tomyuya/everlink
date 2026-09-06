@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "python scripts/nightly.py",
-    "cronSchedule": "0 3 * * *",
+    "cronSchedule": "0 * * * *",
     "restartPolicyType": "NEVER"
   }
 }

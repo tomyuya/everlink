@@ -39,12 +39,17 @@ SCHEDULE GATE + ROTATION (the board /settings page is the control plane):
   row: disabled -> honest heartbeat skip; a board "run-now" request or the
   configured ``run_hour_utc`` -> real run; any other hourly fire -> heartbeat
   skip row. So the Railway cron can tick HOURLY (``0 * * * *``) while the chain
-  still runs once a day — and push-triggered deploy runs become harmless
-  heartbeats instead of surprise full chains. Each real run scans every site in
-  ROTATION mode (``--select due``): a per-site budget of
-  ``ceil(active_slots / rotation_cycle_days)`` least-recently-checked slots, so
-  one full cycle covers the WHOLE mirror instead of re-probing the snapshot head.
-  ``--force`` bypasses the gate for manual triggers.
+  still runs once a day, and a board "run now" is picked up within the hour.
+  Each real run scans every site in ROTATION mode (``--select due``): a per-site
+  budget of ``ceil(active_slots / rotation_cycle_days)`` least-recently-checked
+  slots, so one full cycle covers the WHOLE mirror instead of re-probing the
+  snapshot head. ``--force`` bypasses the gate for manual triggers.
+
+DEPLOY NOTE (verified against Railway on 2026-09-06): a git push builds a new
+image (``buildOnly``) but does NOT start the container — a cron service only
+executes its start command when the cron fires, on the newest built image. So
+push-to-deploy is safe here; the Dashboard cron schedule is the one knob that
+railway.json cannot write back (set it to ``0 * * * *`` once, by hand).
 """
 from __future__ import annotations
 
@@ -62,6 +67,7 @@ from everlink import cli, db  # noqa: E402
 DEFAULT_SITES = ("aethelgem", "sandcart", "hotdeals")   # scan all three read-only (spec §4.1)
 DEFAULT_JUDGE = "mantle"                                # the real nightly uses the LLM judge
 DEFAULT_WEEKLY_DAY = "mon"                               # fold the weekly digest in on Mondays
+LEDGER_KEEP_DAYS = 14                                    # heartbeat rows are kept this long
 
 
 @dataclass
@@ -147,6 +153,17 @@ def _run_state(conn, now: datetime) -> tuple[bool, bool]:
                     (now - timedelta(hours=3),))
         in_flight = int(cur.fetchone()[0]) > 0
     return ran_today, in_flight
+
+
+def _prune_ledger(conn) -> None:
+    """Housekeeping: an hourly cron logs ~23 heartbeats a day, runs are kept."""
+    try:
+        pruned = db.prune_heartbeats(conn, keep_days=LEDGER_KEEP_DAYS)
+        if pruned:
+            print(f"[nightly] ledger: pruned {pruned} heartbeat row(s) "
+                  f"older than {LEDGER_KEEP_DAYS}d")
+    except Exception as e:  # noqa: BLE001 - pruning must never fail a fire
+        print(f"[nightly] ledger prune failed ({e}); continuing", file=sys.stderr)
 
 
 def plan_steps(args: argparse.Namespace, today: date | None = None,
@@ -344,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
                 hour_utc=int(settings["run_hour_utc"]), now_hour_utc=now.hour)
             if not run_it:
                 db.insert_run(conn, "heartbeat", "skipped", reason)
+                _prune_ledger(conn)
                 print(f"[nightly] heartbeat skip: {reason} "
                       f"(cycle={settings['rotation_cycle_days']}d, "
                       f"hour={settings['run_hour_utc']}:00 UTC, "
@@ -395,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         db.finish_run(conn, run_id, status,
                       {"trigger": trigger, "budgets": budgets,
                        "steps": [{"label": r.label, "code": r.code} for r in results]})
+        _prune_ledger(conn)
         conn.close()
     print(f"\n[nightly] {'all executed steps ok' if ok else 'one or more steps did not exit 0'} "
           f"({len(plan.executed)} run, {len(plan.skipped)} skipped).")

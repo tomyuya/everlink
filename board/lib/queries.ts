@@ -284,6 +284,10 @@ export const DEFAULT_SETTINGS: BoardSettings = {
 /** A cron fire older than this means the Railway heartbeat wiring is missing. */
 export const HEARTBEAT_WINDOW_MIN = 75;
 
+/** Ledger rows the page shows: recent fires (liveness) + recent real runs. */
+const LEDGER_FIRE_ROWS = 12;
+const LEDGER_RUN_ROWS = 6;
+
 const SETTINGS_KEYS = [
   "rotation_cycle_days", "run_hour_utc", "enabled",
   "run_requested_at", "run_requested_by", "updated_at", "updated_by",
@@ -358,23 +362,42 @@ export async function requestRun(by: string): Promise<BoardSettings> {
   return next;
 }
 
-/** The cron ledger + liveness: is the Railway heartbeat actually ticking? */
+/** The cron ledger + liveness: is the Railway heartbeat actually ticking?
+ *
+ * An hourly cron logs ~23 heartbeat skips a day, so `runs` merges the newest
+ * fires with the newest REAL runs: a fire-only window would push the last full
+ * run off the page within hours and /settings could no longer answer "did it
+ * run?". `fires` stays fire-only because liveness must count every tick.
+ */
 export async function cronOverview(): Promise<CronOverview> {
   const sql = getSql();
-  const rows = await query<NightlyRunRow[]>(
-    sql`SELECT id, kind, status, reason, started_at, finished_at, summary
-        FROM nightly_runs ORDER BY started_at DESC LIMIT 10`,
-  );
-  const lastFireMs = rows[0]?.started_at
-    ? new Date(rows[0].started_at).getTime()
+  const [fires, realRuns] = await Promise.all([
+    query<NightlyRunRow[]>(
+      sql`SELECT id, kind, status, reason, started_at, finished_at, summary
+          FROM nightly_runs ORDER BY started_at DESC LIMIT ${LEDGER_FIRE_ROWS}`,
+    ),
+    query<NightlyRunRow[]>(
+      sql`SELECT id, kind, status, reason, started_at, finished_at, summary
+          FROM nightly_runs WHERE kind = 'run'
+          ORDER BY started_at DESC LIMIT ${LEDGER_RUN_ROWS}`,
+    ),
+  ]);
+  const merged = new Map<number, NightlyRunRow>();
+  for (const r of [...fires, ...realRuns]) merged.set(r.id, r);
+  const rows = [...merged.values()]
+    .sort((a, b) => b.started_at.localeCompare(a.started_at))
+    .slice(0, LEDGER_FIRE_ROWS);
+  const lastFireMs = fires[0]?.started_at
+    ? new Date(fires[0].started_at).getTime()
     : null;
   return {
     runs: rows,
-    last_fire_at: rows[0]?.started_at ?? null,
+    fires,
+    last_fire_at: fires[0]?.started_at ?? null,
     heartbeat_alive:
       lastFireMs !== null &&
       Date.now() - lastFireMs <= HEARTBEAT_WINDOW_MIN * 60_000,
-    last_run: rows.find((r) => r.kind === "run") ?? null,
+    last_run: realRuns[0] ?? null,
   };
 }
 

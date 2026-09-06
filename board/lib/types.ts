@@ -165,9 +165,15 @@ export interface NightlyRunRow {
   summary: string | null;
 }
 
-/** The cron ledger as the Settings page shows it. */
+/** The cron ledger as the Settings page shows it.
+ *
+ * `runs` is the display list (newest fires + newest real runs, merged) while
+ * `fires` is fire-only and drives liveness: an hourly cron logs ~23 heartbeat
+ * skips a day, so the last real run must not fall out of the visible window.
+ */
 export interface CronOverview {
   runs: NightlyRunRow[];
+  fires: NightlyRunRow[];
   last_fire_at: string | null;
   heartbeat_alive: boolean;
   last_run: NightlyRunRow | null;

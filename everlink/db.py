@@ -362,14 +362,21 @@ def fetch_due_slots(conn, site: str, limit: int) -> list[LinkSlot]:
 
 
 def touch_last_checked(conn, slot_ids: list) -> int:
-    """Stamp ``last_checked_at = now()`` on the slots a scan just probed."""
+    """Stamp ``last_checked_at = now()`` on the slots a scan just probed.
+
+    This stamp is what makes the rotation advance: without it (or without the
+    commit, since psycopg connections here are not autocommit) the next
+    ``--select due`` fire would pick the very same slots again.
+    """
     _assert_writable(conn.info.dsn or "")
     if not slot_ids:
         return 0
     with conn.cursor() as cur:
         cur.execute("UPDATE link_slots SET last_checked_at = now() WHERE id = ANY(%s)",
                     (list(slot_ids),))
-        return cur.rowcount
+        touched = cur.rowcount
+    conn.commit()
+    return touched
 
 
 def insert_run(conn, kind: str, status: str, reason: str = "") -> int:
@@ -393,4 +400,20 @@ def finish_run(conn, run_id: int, status: str, summary: dict | None = None) -> N
                      json.dumps(summary, default=str) if summary is not None else None,
                      run_id))
     conn.commit()
+
+
+def prune_heartbeats(conn, keep_days: int = 14) -> int:
+    """Drop heartbeat rows older than ``keep_days``; every real run is kept.
+
+    An hourly cron writes ~23 heartbeat rows a day, so the ledger would otherwise
+    grow without bound while carrying no information: "nothing was due yet".
+    """
+    _assert_writable(conn.info.dsn or "")
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM nightly_runs WHERE kind = 'heartbeat' "
+                    "AND started_at < now() - make_interval(days => %s)",
+                    (max(1, int(keep_days)),))
+        pruned = cur.rowcount
+    conn.commit()
+    return pruned
 
