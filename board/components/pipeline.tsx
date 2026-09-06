@@ -29,8 +29,8 @@ const STAGES: Stage[] = [
   {
     icon: <Radar className="h-4 w-4" />,
     title: "Scan",
-    desc: "Inventories outbound link slots — a read-only crawl of any sitemap/page (defaults: 25 pages / 500 slots) or a first-party CSV snapshot — and mirrors them into its own store.",
-    meta: "needs: just a URL · no DB, no creds",
+    desc: "Inventories outbound link slots from a first-party CSV snapshot or a read-only crawl of any sitemap/page (capped at 25 pages / 500 slots). Nothing is written back to the scanned site; findings mirror into EverLink's own store.",
+    meta: "needs: a URL · no creds · the mirror + rotation need the DB",
   },
   {
     icon: <Activity className="h-4 w-4" />,
@@ -47,7 +47,7 @@ const STAGES: Stage[] = [
   {
     icon: <Inbox className="h-4 w-4" />,
     title: "You decide",
-    desc: "Each distinct dead link becomes ONE card (duplicates merged). High-risk cards are pushed one by one, the rest roll into a batch list. Reject with a reason and it stays on the card.",
+    desc: "Each distinct dead link becomes ONE card (duplicates merged). Medium- and high-risk cards are pushed immediately, one message each; low-risk rolls into a single weekly batch list. Reject with a reason and it stays on the card.",
     meta: "needs: a human · the only mandatory human step",
     href: "/inbox",
     hrefLabel: "Inbox",

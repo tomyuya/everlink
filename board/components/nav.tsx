@@ -14,11 +14,12 @@ import { ThemeToggle } from "./theme-toggle";
  */
 const LINKS = [
   { href: "/", label: "Home", icon: House, exact: true },
-  { href: "/docs", label: "Docs·手册", icon: FileText, exact: false },
   { href: "/inbox", label: "Inbox", icon: Inbox, exact: false },
   { href: "/audit", label: "Audit", icon: ScrollText, exact: false },
   { href: "/report", label: "Report", icon: BarChart3, exact: false },
   { href: "/settings", label: "Settings", icon: Settings, exact: false },
+  // Docs last: it is reference material, not a step of the operating loop.
+  { href: "/docs", label: "Docs", icon: FileText, exact: false },
 ] as const;
 
 /** Top navigation. Client component so it can highlight the active route. */

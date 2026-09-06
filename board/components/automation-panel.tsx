@@ -126,7 +126,8 @@ export function AutomationPanel({
         ))}
       </div>
 
-      <details className="mt-3 group">
+      {/* open by default: the flags are the point of this panel, not a footnote. */}
+      <details open className="mt-3 group">
         <summary className="cursor-pointer select-none text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100">
           Useful flags
         </summary>
