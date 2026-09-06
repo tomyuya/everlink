@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { AutomationPanel } from "@/components/automation-panel";
+import { OnboardingPaths } from "@/components/onboarding-paths";
 import { Pipeline } from "@/components/pipeline";
 
 export const metadata: Metadata = {
@@ -27,7 +28,7 @@ export default function HowItWorksPage() {
   return (
     <div className="space-y-8">
       <Positioning />
-      <TwoOnboardingPaths />
+      <OnboardingPaths />
       <TwoDatabaseModel />
       <DeployerContract />
       <Pipeline />
@@ -114,95 +115,6 @@ function Badge({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-/** The two ways EverLink gets links to patrol — generic crawl (default) vs first-party DB (deep). */
-function TwoOnboardingPaths() {
-  return (
-    <section aria-label="Two ways to feed EverLink" className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        Two ways to feed it · start with zero config
-      </h2>
-      <p className="max-w-prose text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-        EverLink does{" "}
-        <strong className="text-zinc-700 dark:text-zinc-300">not</strong> need access to your
-        database to start. Point it at any public sitemap or page URL and it crawls
-        read-only over HTTP, extracting outbound links on the fly. Connecting your own DB
-        is an <em>optional</em> deep path for block-level slots and write-back.
-      </p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <PathCard
-          n="A"
-          tone="default"
-          icon={<Globe className="h-4 w-4" />}
-          title="Generic read-only crawl — the default, zero config"
-          cmd="scan --site https://your-site.com/sitemap.xml"
-          lines={[
-            "Works with ANY website — no source database, no code change.",
-            "Read-only HTTP: fetches public pages and extracts outbound links live.",
-            "L1/L2 detection needs zero AWS credentials; only the Judge's fix proposals need an LLM.",
-            "Never writes back · honours robots.txt · ≤1 request per link · polite rate limit.",
-          ]}
-        />
-        <PathCard
-          n="B"
-          tone="deep"
-          icon={<Database className="h-4 w-4" />}
-          title="First-party DB snapshot — optional deep path"
-          cmd="<SITE>_DATABASE_URL + scripts/export_slots.py"
-          lines={[
-            "For your OWN site when you want block-level slots and write-back.",
-            "Connects STRICTLY READ-ONLY; export_slots.py writes a data/slots_<site>.csv snapshot.",
-            "Adds <SITE>_PUBLIC_ORIGIN so a relative /products/x becomes an absolute URL to probe.",
-            "Write-back stays gated (approved cards only) and whitelisted per site.",
-          ]}
-        />
-      </div>
-    </section>
-  );
-}
-
-function PathCard({
-  n,
-  title,
-  cmd,
-  lines,
-  icon,
-  tone,
-}: {
-  n: string;
-  title: string;
-  cmd: string;
-  lines: string[];
-  icon: ReactNode;
-  tone: "default" | "deep";
-}) {
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center gap-2">
-        <span
-          className={
-            tone === "default"
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-sky-600 dark:text-sky-400"
-          }
-        >
-          {icon}
-        </span>
-        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          {n} · {title}
-        </span>
-      </div>
-      <code className="mt-2 inline-block rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-        {cmd}
-      </code>
-      <ul className="mt-2 space-y-1 text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-        {lines.map((l) => (
-          <li key={l}>· {l}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 /** The key mental model: your read-only source DB vs EverLink's own DB. */
 function TwoDatabaseModel() {
   return (
@@ -210,7 +122,7 @@ function TwoDatabaseModel() {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
         Two databases · the write-safety boundary
       </h2>
-      <p className="max-w-prose text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+      <p className="text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
         Whichever path feeds EverLink, the write-safety rule is the same: it reads your
         data and writes <strong className="text-zinc-700 dark:text-zinc-300">only</strong>{" "}
         to its own store. The source database below is the optional deep path (B) — the
@@ -220,6 +132,7 @@ function TwoDatabaseModel() {
         <DbCard
           n="①"
           title="Your site's database (optional · deep path B)"
+          badge="Needed only for path B"
           env="<SITE>_DATABASE_URL"
           tone="readonly"
           lines={[
@@ -251,16 +164,19 @@ function DbCard({
   env,
   lines,
   tone,
+  badge,
 }: {
   n: string;
   title: string;
   env: string;
   lines: string[];
   tone: "readonly" | "readwrite";
+  /** Optional pill next to the title, e.g. "Needed only for path B". */
+  badge?: string;
 }) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Database
           className={
             tone === "readonly"
@@ -271,6 +187,11 @@ function DbCard({
         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           {n} {title}
         </span>
+        {badge ? (
+          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+            {badge}
+          </span>
+        ) : null}
       </div>
       <code className="mt-2 inline-block rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
         {env}

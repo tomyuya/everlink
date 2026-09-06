@@ -4,6 +4,7 @@ import Link from "next/link";
 import { HeartPulse, Inbox as InboxIcon, ListChecks, Timer } from "lucide-react";
 
 import { AutomationPanel } from "@/components/automation-panel";
+import { OnboardingPaths } from "@/components/onboarding-paths";
 import { Pipeline } from "@/components/pipeline";
 import { listAudit, statusCounts, weeklyStats } from "@/lib/queries";
 import { relativeTime } from "@/lib/utils";
@@ -50,6 +51,10 @@ export default async function HomePage() {
           lastActivity={lastActivity}
         />
       ) : null}
+
+      {/* Two ways to feed EverLink — sits right above the loop so nobody reads
+          the pipeline as "you must wire a database first". */}
+      <OnboardingPaths />
 
       <Pipeline />
 

@@ -5,7 +5,8 @@
 > **Repo**: https://github.com/tomyuya/everlink (MIT, open-source, self-hosted, **not a SaaS**)
 > **Companion docs**: `README.md` (positioning & architecture), `DEPLOYMENT.md` (deployment runbook),
 > `DEMO_SCRIPT.md` / `DEMO_RUNSHEET.md` (demo scripts), `docs/specs/` (design specs)
-> **Chinese twin**: `EverLink 部署配置与使用操作手册.md` (same directory / `/docs` on the board).
+> **Chinese twin**: `EverLink 部署配置与使用操作手册.md` (same directory; on the board:
+> `/docs` serves this English manual, `/docs/zh` serves the Chinese one).
 > When the two diverge, the repo `board/content/` copies are the served source of truth.
 
 ---
@@ -577,7 +578,7 @@ existing risk-vs-benefit decision).
 |---|---|
 | `/` | positioning badges (open-source / self-hosted / not-a-SaaS) + counters |
 | `/how-it-works` | two-database diagram + six-stage pipeline + deployer contract (static, read-only) |
-| `/docs` | this manual (Chinese; `/docs/en` for English) |
+| `/docs` | this manual (English; `/docs/zh` for Chinese) |
 | `/inbox` | the review battlefield: status tabs + checkboxes + batch Approve/Reject bar |
 | `/decision/<id>` | one card: rationale, NEW SENTENCE, evidence chain (slot-level L1/L2), live Approve/Reject buttons (pending) or settled notice (decided) |
 | `/audit` | full audit stream, filterable (`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…) |
