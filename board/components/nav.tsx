@@ -26,7 +26,10 @@ export function Nav() {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+      {/* flex-wrap + min-w-0: with six labelled tabs the row is ~726px wide, so a
+          677px viewport used to push the theme toggle 5px outside the document and
+          give every page a horizontal scrollbar. Now the tabs wrap instead. */}
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
         <Link
           href="/"
           className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100"
@@ -41,7 +44,7 @@ export function Nav() {
           />
           <span>EverLink</span>
         </Link>
-        <nav className="ml-auto flex items-center gap-1">
+        <nav className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
           {LINKS.map(({ href, label, icon: Icon, exact }) => {
             const active = exact ? pathname === href : pathname.startsWith(href);
             return (

@@ -125,48 +125,52 @@ export function SettingsPanel({
             />
             days
           </label>
-          <table className="mt-3 w-full text-left text-xs text-zinc-600 dark:text-zinc-400">
-            <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className="py-1 pr-2 font-medium">site</th>
-                <th className="py-1 pr-2 font-medium">active</th>
-                <th className="py-1 pr-2 font-medium">daily budget</th>
-                <th className="py-1 pr-2 font-medium">covered in cycle</th>
-                <th className="py-1 font-medium">oldest probe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rotation.map((r) => {
-                const pct = r.active > 0 ? Math.round((r.covered / r.active) * 100) : 0;
-                return (
-                  <tr key={r.site} className="border-b border-zinc-100 dark:border-zinc-800/60">
-                    <td className="py-1 pr-2 font-mono">{r.site}</td>
-                    <td className="py-1 pr-2">{r.active.toLocaleString()}</td>
-                    <td className="py-1 pr-2">{siteBudget(r.active, cycle).toLocaleString()}</td>
-                    <td className="py-1 pr-2">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="inline-block h-1.5 w-16 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                          <span
-                            className="block h-full rounded-full bg-emerald-500"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </span>
-                        {pct}%
-                      </span>
-                    </td>
-                    <td className="py-1">{fmtUtc(r.oldest)}</td>
-                  </tr>
-                );
-              })}
-              {rotation.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-2 text-zinc-400">
-                    No slots in the mirror yet.
-                  </td>
+          {/* Same guard as the cron ledger: scroll sideways rather than stretch the
+              page if this table ever grows a column or the viewport gets narrow. */}
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-400">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <th className="py-1 pr-2 font-medium">site</th>
+                  <th className="py-1 pr-2 font-medium">active</th>
+                  <th className="py-1 pr-2 font-medium">daily budget</th>
+                  <th className="py-1 pr-2 font-medium">covered in cycle</th>
+                  <th className="py-1 font-medium">oldest probe</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rotation.map((r) => {
+                  const pct = r.active > 0 ? Math.round((r.covered / r.active) * 100) : 0;
+                  return (
+                    <tr key={r.site} className="border-b border-zinc-100 dark:border-zinc-800/60">
+                      <td className="py-1 pr-2 font-mono">{r.site}</td>
+                      <td className="py-1 pr-2">{r.active.toLocaleString()}</td>
+                      <td className="py-1 pr-2">{siteBudget(r.active, cycle).toLocaleString()}</td>
+                      <td className="py-1 pr-2">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="inline-block h-1.5 w-16 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                            <span
+                              className="block h-full rounded-full bg-emerald-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </span>
+                          {pct}%
+                        </span>
+                      </td>
+                      <td className="py-1">{fmtUtc(r.oldest)}</td>
+                    </tr>
+                  );
+                })}
+                {rotation.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-2 text-zinc-400">
+                      No slots in the mirror yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         {/* --------------------------------------------- schedule & cron ----- */}

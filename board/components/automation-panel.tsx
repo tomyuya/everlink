@@ -94,11 +94,11 @@ export function AutomationPanel({
         decides: only the fire matching the run hour runs the whole chain, and every other
         fire logs an honest heartbeat skip. (An hourly cron gives run-now a
         within-the-hour pickup; a daily cron set to the run hour works too.) Each run
-        rotates: per-site budget ={" "}
+        rotates: it takes the least-recently-checked slots, budget ={" "}
         <code className="font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
           ceil(active ÷ cycle)
         </code>{" "}
-        least-recently-checked slots, so one cycle covers the WHOLE mirror instead of
+        per site (floor 25), so one cycle covers the WHOLE mirror instead of
         re-probing the same head forever.
       </p>
 

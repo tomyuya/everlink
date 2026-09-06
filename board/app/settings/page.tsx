@@ -215,58 +215,62 @@ export default async function SettingsPage() {
             <p className="mt-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
               Heartbeat skips are pruned after 14 days; every full run is kept.
             </p>
-            <table className="mt-2 w-full text-left text-xs text-zinc-600 dark:text-zinc-400">
-              <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                  <th className="py-1 pr-3 font-medium">started (UTC)</th>
-                  <th className="py-1 pr-3 font-medium">kind</th>
-                  <th className="py-1 pr-3 font-medium">origin</th>
-                  <th className="py-1 pr-3 font-medium">status</th>
-                  <th className="py-1 pr-3 font-medium">duration</th>
-                  <th className="py-1 font-medium">reason / trigger</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(overview?.runs ?? []).map((r) => (
-                  <tr key={r.id} className="border-b border-zinc-100 dark:border-zinc-800/60">
-                    <td className="py-1 pr-3 font-mono">{formatDateTime(r.started_at)}</td>
-                    <td className="py-1 pr-3">{r.kind}</td>
-                    <td className="py-1 pr-3 text-zinc-400 dark:text-zinc-500">
-                      {originLabel(parseLedgerReason(r.reason).origin)}
-                    </td>
-                    <td className="py-1 pr-3">
-                      <span
-                        className={
-                          r.status === "ok"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : r.status === "skipped"
-                              ? "text-zinc-400"
-                              : "text-amber-600 dark:text-amber-400"
-                        }
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="py-1 pr-3">
-                      {r.finished_at
-                        ? `${Math.max(0, Math.round((new Date(r.finished_at).getTime() - new Date(r.started_at).getTime()) / 1000))}s`
-                        : "…"}
-                    </td>
-                    <td className="py-1">
-                      {parseLedgerReason(r.reason).text}
-                    </td>
+            {/* Six columns now (origin was added): below ~440px the ledger must
+                scroll sideways instead of stretching the whole page. */}
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-400">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                    <th className="py-1 pr-3 font-medium">started (UTC)</th>
+                    <th className="py-1 pr-3 font-medium">kind</th>
+                    <th className="py-1 pr-3 font-medium">origin</th>
+                    <th className="py-1 pr-3 font-medium">status</th>
+                    <th className="py-1 pr-3 font-medium">duration</th>
+                    <th className="py-1 font-medium">reason / trigger</th>
                   </tr>
-                ))}
-                {(overview?.runs.length ?? 0) === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-2 text-zinc-400">
-                      No cron fire recorded yet — the ledger fills on the first fire
-                      after this schema lands.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(overview?.runs ?? []).map((r) => (
+                    <tr key={r.id} className="border-b border-zinc-100 dark:border-zinc-800/60">
+                      <td className="py-1 pr-3 font-mono">{formatDateTime(r.started_at)}</td>
+                      <td className="py-1 pr-3">{r.kind}</td>
+                      <td className="py-1 pr-3 text-zinc-400 dark:text-zinc-500">
+                        {originLabel(parseLedgerReason(r.reason).origin)}
+                      </td>
+                      <td className="py-1 pr-3">
+                        <span
+                          className={
+                            r.status === "ok"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : r.status === "skipped"
+                                ? "text-zinc-400"
+                                : "text-amber-600 dark:text-amber-400"
+                          }
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="py-1 pr-3">
+                        {r.finished_at
+                          ? `${Math.max(0, Math.round((new Date(r.finished_at).getTime() - new Date(r.started_at).getTime()) / 1000))}s`
+                          : "…"}
+                      </td>
+                      <td className="py-1">
+                        {parseLedgerReason(r.reason).text}
+                      </td>
+                    </tr>
+                  ))}
+                  {(overview?.runs.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-2 text-zinc-400">
+                        No ledger row yet — the first fire fills it, and tags where it
+                        came from.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       )}
