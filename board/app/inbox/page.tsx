@@ -3,8 +3,10 @@ import { Inbox as InboxIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { InboxClient } from "@/components/inbox-client";
+import { PulseStrip } from "@/components/pulse-strip";
 import { isReadonly } from "@/lib/db";
-import { listDecisions, statusCounts } from "@/lib/queries";
+import { listAudit, listDecisions, statusCounts, weeklyStats } from "@/lib/queries";
+import { relativeTime } from "@/lib/utils";
 import type { Decision, DecisionStatus, StatusCounts } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -31,18 +33,39 @@ export default async function InboxPage({
 
   let decisions: Decision[] = [];
   let counts: StatusCounts = {};
+  let healed = 0;
+  let decided = 0;
+  let lastActivity = "";
   let dbError: string | null = null;
   try {
-    [decisions, counts] = await Promise.all([
+    const [d, c, stats, audit] = await Promise.all([
       listDecisions(status, 200),
       statusCounts(),
+      weeklyStats(30),
+      listAudit(1),
     ]);
+    decisions = d;
+    counts = c;
+    healed = stats.links_healed;
+    decided = stats.decisions_decided;
+    lastActivity = relativeTime(audit[0]?.ts);
   } catch (e) {
     dbError = e instanceof Error ? e.message : "Failed to load decisions";
   }
 
   return (
     <div className="space-y-5">
+      {/* Operational KPI row first: what awaits you, what the agent already
+          settled, and when it last acted — before diving into the queue. */}
+      {!dbError ? (
+        <PulseStrip
+          pending={counts.pending ?? 0}
+          healed={healed}
+          decided={decided}
+          lastActivity={lastActivity}
+        />
+      ) : null}
+
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           Decision inbox

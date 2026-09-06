@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { HeartPulse, Inbox as InboxIcon, ListChecks, Timer } from "lucide-react";
 
 import { AutomationPanel } from "@/components/automation-panel";
 import { OnboardingPaths } from "@/components/onboarding-paths";
 import { Pipeline } from "@/components/pipeline";
-import { listAudit, statusCounts, weeklyStats } from "@/lib/queries";
+import { listAudit } from "@/lib/queries";
 import { relativeTime } from "@/lib/utils";
-import type { StatusCounts, WeeklyStats } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,40 +15,24 @@ export const metadata: Metadata = {
 };
 
 /**
- * The product home page: what EverLink is, proof the loop is running, the whole
- * autonomous pipeline at a glance, and the nightly entrypoint. The working queue
- * lives on /inbox so this page stays a clean "understand in one glance" surface.
+ * The product home page — the public showcase: what EverLink is, the two ways
+ * to feed it, the whole autonomous pipeline at a glance, and the nightly
+ * entrypoint. Operational counters (awaiting / healed / decided) deliberately
+ * live on /inbox, the working surface, so this page stays a clean
+ * "understand in one glance" narrative for outsiders.
  */
 export default async function HomePage() {
-  let counts: StatusCounts = {};
-  let stats: WeeklyStats | null = null;
   let lastActivity = "";
-  let dbError: string | null = null;
   try {
-    const [c, s, audit] = await Promise.all([
-      statusCounts(),
-      weeklyStats(30),
-      listAudit(1),
-    ]);
-    counts = c;
-    stats = s;
+    const audit = await listAudit(1);
     lastActivity = relativeTime(audit[0]?.ts);
-  } catch (e) {
-    dbError = e instanceof Error ? e.message : "Failed to load pipeline health";
+  } catch {
+    /* No DB configured: the showcase still renders; the panel shows "—". */
   }
 
   return (
     <div className="space-y-8">
       <Hero />
-
-      {!dbError && stats ? (
-        <Pulse
-          pending={counts.pending ?? 0}
-          healed={stats.links_healed}
-          decided={stats.decisions_decided}
-          lastActivity={lastActivity}
-        />
-      ) : null}
 
       {/* Two ways to feed EverLink — sits right above the loop so nobody reads
           the pipeline as "you must wire a database first". */}
@@ -131,44 +113,6 @@ function Hero() {
           priority
         />
       </figure>
-    </section>
-  );
-}
-
-/** Live proof the loop is running, even when the inbox is (happily) empty. */
-function Pulse({
-  pending,
-  healed,
-  decided,
-  lastActivity,
-}: {
-  pending: number;
-  healed: number;
-  decided: number;
-  lastActivity: string;
-}) {
-  const tiles = [
-    { icon: <InboxIcon className="h-4 w-4" />, label: "Awaiting you", value: String(pending), accent: "text-amber-600 dark:text-amber-400" },
-    { icon: <HeartPulse className="h-4 w-4" />, label: "Links healed · 30d", value: String(healed), accent: "text-emerald-600 dark:text-emerald-400" },
-    { icon: <ListChecks className="h-4 w-4" />, label: "Decisions decided · 30d", value: String(decided), accent: "text-sky-600 dark:text-sky-400" },
-    { icon: <Timer className="h-4 w-4" />, label: "Last activity", value: lastActivity || "—", accent: "text-zinc-600 dark:text-zinc-300" },
-  ];
-  return (
-    <section aria-label="Pipeline health" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {tiles.map(({ icon, label, value, accent }) => (
-        <div
-          key={label}
-          className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
-        >
-          <div className={`flex items-center gap-1.5 text-xs ${accent}`}>
-            {icon}
-            <span className="font-medium">{label}</span>
-          </div>
-          <p className="mt-1.5 text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-            {value}
-          </p>
-        </div>
-      ))}
     </section>
   );
 }
