@@ -391,15 +391,22 @@ class ScanReport(BaseModel):
 
 def run_scan(source, *, limit: Optional[int] = 25, rate_delay: float = 1.0,
              timeout: float = 15.0, use_l2: bool = True, judge: Optional[Agent] = None,
-             judge_backend: str = "none", **adapter_kwargs) -> ScanReport:
+             judge_backend: str = "none", preselected: Optional[list] = None,
+             **adapter_kwargs) -> ScanReport:
     """Discover -> detect (deterministic) -> optionally judge each problem.
 
     ``source`` is a first-party site name OR any URL/sitemap/list (generic adapter).
     Detection is pure HTTP (no LLM); the Judge runs only if ``judge`` is supplied.
+    ``preselected`` (rotation mode) bypasses discovery: the caller hands in the
+    exact slots to probe (e.g. the least-recently-checked mirror rows), so the
+    nightly can cover the WHOLE mirror over a cycle instead of the snapshot head.
     """
-    slots = adapters.extract_slots(source, **adapter_kwargs)
-    if limit is not None:
-        slots = slots[:limit]
+    if preselected is not None:
+        slots = list(preselected)
+    else:
+        slots = adapters.extract_slots(source, **adapter_kwargs)
+        if limit is not None:
+            slots = slots[:limit]
     checks = detect.check_slots(slots, rate_delay=rate_delay, timeout=timeout, use_l2=use_l2)
 
     proposals: list[SlotProposal] = []

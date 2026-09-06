@@ -84,6 +84,7 @@ def _persist(report: agents.ScanReport, audit_records: list[dict],
         db.upsert_link_slots(conn, report.slots)   # FK parents first: generic scans discover slots live
         for c in report.checks:
             db.insert_slot_check(conn, c)
+        db.touch_last_checked(conn, [s.id for s in report.slots])   # rotation coverage
         for r in audit_records:
             db.insert_audit(conn, r.get("agent", ""), r.get("event", "tool_result"),
                             json.dumps(r, default=str))
@@ -126,12 +127,39 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.include_internal:
         adapter_kwargs["include_internal"] = True
 
-    print(f"[1/2] discovering + detecting on '{args.site}' "
-          f"(limit={args.limit}, L2={'off' if args.no_l2 else 'on'}, judge={backend}) ...")
+    preselected = None
+    if args.select == "due":
+        # Rotation mode: probe the least-recently-checked mirror rows instead of
+        # the snapshot head, so a cycle of nightly runs covers EVERY slot once.
+        from . import db
+        try:
+            dsn = db.everlink_dsn()
+        except RuntimeError as e:
+            print(f"[everlink] --select due needs the operational DB:\n{e}",
+                  file=sys.stderr)
+            return 2
+        conn = db.connect(dsn)
+        try:
+            db.ensure_schema(conn)
+            preselected = db.fetch_due_slots(conn, args.site, args.limit or 25)
+        finally:
+            conn.close()
+        if not preselected:
+            print(f"[1/2] due rotation: no active slots for '{args.site}' in the mirror "
+                  f"yet (run a head scan first to populate link_slots).")
+            return 0
+        print(f"[1/2] due rotation on '{args.site}': probing the {len(preselected)} "
+              f"least-recently-checked slot(s) "
+              f"(L2={'off' if args.no_l2 else 'on'}, judge={backend}) ...")
+    else:
+        print(f"[1/2] discovering + detecting on '{args.site}' "
+              f"(limit={args.limit}, L2={'off' if args.no_l2 else 'on'}, judge={backend}) ...")
     report = agents.run_scan(
-        args.site, limit=args.limit, rate_delay=args.rate_delay,
+        args.site, limit=None if preselected is not None else args.limit,
+        rate_delay=args.rate_delay,
         timeout=args.timeout, use_l2=not args.no_l2,
-        judge=judge, judge_backend=backend, **adapter_kwargs)
+        judge=judge, judge_backend=backend, preselected=preselected,
+        **adapter_kwargs)
     _print_report(report)
 
     if backend != "none":
@@ -583,6 +611,10 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--site", required=True,
                     help="first-party site key (aethelgem / sandcart [FlashDeals] / hotdeals) OR any URL/sitemap")
     sc.add_argument("--limit", type=int, default=25, help="max slots to scan (default 25)")
+    sc.add_argument("--select", choices=["head", "due"], default="head",
+                    help="head=first N slots of the snapshot (default, deterministic); "
+                         "due=rotation mode: the N least-recently-checked active slots "
+                         "from the operational mirror, so repeated runs cover every slot")
     sc.add_argument("--rate-delay", type=float, default=1.0, help="seconds between requests")
     sc.add_argument("--timeout", type=float, default=15.0)
     sc.add_argument("--no-l2", action="store_true", help="L1 only (skip L2 page-parse)")

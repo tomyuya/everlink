@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpen, FileText, House, Inbox, ScrollText } from "lucide-react";
+import { BarChart3, BookOpen, FileText, House, Inbox, ScrollText, Settings } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/inbox", label: "Inbox", icon: Inbox, exact: false },
   { href: "/audit", label: "Audit", icon: ScrollText, exact: false },
   { href: "/report", label: "Report", icon: BarChart3, exact: false },
+  { href: "/settings", label: "Settings", icon: Settings, exact: false },
 ] as const;
 
 /** Top navigation. Client component so it can highlight the active route. */

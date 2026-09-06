@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -289,4 +290,107 @@ def mark_snapshot_rolled_back(conn, snapshot_id: int) -> bool:
     with conn.cursor() as cur:
         cur.execute(sql, (snapshot_id,))
         return cur.rowcount > 0
+
+
+# --------------------------------------------------------------------------- #
+# Control plane (board /settings + the nightly cron gate). All writes stay in
+# EverLink's OWN store; the settings row is the operator's single knob panel.
+# --------------------------------------------------------------------------- #
+DEFAULT_SETTINGS = {
+    "rotation_cycle_days": 30,   # full-pass window: every active slot probed once
+    "run_hour_utc": 3,           # which hourly heartbeat actually runs the chain
+    "enabled": True,             # board kill-switch for the cron
+    "run_requested_at": None,    # board "run now" request (consumed by next fire)
+    "run_requested_by": None,
+}
+
+
+def default_settings() -> dict:
+    return dict(DEFAULT_SETTINGS)
+
+
+def get_settings(conn) -> dict:
+    """The single 'main' settings row merged over defaults (missing row = defaults)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT value FROM settings WHERE id = 'main'")
+        row = cur.fetchone()
+    if not row:
+        return default_settings()
+    try:
+        stored = json.loads(row[0])
+    except (TypeError, ValueError):
+        return default_settings()
+    merged = default_settings()
+    merged.update({k: v for k, v in stored.items() if k in merged})
+    return merged
+
+
+def set_settings(conn, patch: dict, by: str = "agent") -> dict:
+    """Read-modify-write the 'main' settings row; unknown keys are ignored."""
+    _assert_writable(conn.info.dsn or "")
+    current = get_settings(conn)
+    for k, v in patch.items():
+        if k in current:
+            current[k] = v
+    current["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    current["updated_by"] = by
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO settings (id, value, updated_at) VALUES ('main', %s, now()) "
+            "ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (json.dumps(current, default=str),))
+    conn.commit()
+    return current
+
+
+def count_active_slots(conn) -> dict:
+    """site -> active slot count (the rotation budget denominator)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT site, count(*) FROM link_slots WHERE status = 'active' "
+                    "GROUP BY site")
+        return {r[0]: int(r[1]) for r in cur.fetchall()}
+
+
+def fetch_due_slots(conn, site: str, limit: int) -> list[LinkSlot]:
+    """Least-recently-checked active slots first (never-checked = most due)."""
+    cols = ", ".join(SLOT_COLUMNS)
+    sql = (f"SELECT {cols} FROM link_slots WHERE site = %s AND status = 'active' "
+           "ORDER BY last_checked_at NULLS FIRST, id LIMIT %s")
+    with conn.cursor() as cur:
+        cur.execute(sql, (site, max(1, int(limit))))
+        return [_row_to_slot(r) for r in cur.fetchall()]
+
+
+def touch_last_checked(conn, slot_ids: list) -> int:
+    """Stamp ``last_checked_at = now()`` on the slots a scan just probed."""
+    _assert_writable(conn.info.dsn or "")
+    if not slot_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute("UPDATE link_slots SET last_checked_at = now() WHERE id = ANY(%s)",
+                    (list(slot_ids),))
+        return cur.rowcount
+
+
+def insert_run(conn, kind: str, status: str, reason: str = "") -> int:
+    """Open a nightly_runs row (kind: run | heartbeat); returns its id."""
+    _assert_writable(conn.info.dsn or "")
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO nightly_runs (kind, status, reason) "
+                    "VALUES (%s, %s, %s) RETURNING id", (kind, status, reason))
+        run_id = int(cur.fetchone()[0])
+    conn.commit()
+    return run_id
+
+
+def finish_run(conn, run_id: int, status: str, summary: dict | None = None) -> None:
+    """Close a nightly_runs row with its final status + JSON summary."""
+    _assert_writable(conn.info.dsn or "")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE nightly_runs SET status = %s, finished_at = now(), "
+                    "summary = %s WHERE id = %s",
+                    (status,
+                     json.dumps(summary, default=str) if summary is not None else None,
+                     run_id))
+    conn.commit()
 

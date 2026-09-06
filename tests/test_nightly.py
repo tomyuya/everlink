@@ -218,6 +218,51 @@ def test_print_summary_ok_ignores_skips_and_flags_failures():
         [nightly.StepResult("scan:a", 2)]) is False        # a degraded scan is not "ok"
 
 
+# --------------------------------------------------------------------------- #
+# rotation budget + schedule gate — the pure control-plane predicates
+# --------------------------------------------------------------------------- #
+def test_site_budget_covers_every_slot_inside_the_cycle():
+    assert nightly.site_budget(15834, 30) == 528       # ceil(15834/30)
+    assert nightly.site_budget(7606, 30) == 254        # ceil(7606/30)
+    assert nightly.site_budget(77, 30) == 25           # floor: a tiny site still probed
+    assert nightly.site_budget(0, 30) == 25
+    assert nightly.site_budget(100, 7) == 25           # ceil(100/7)=15 < floor 25
+    assert nightly.site_budget(1000, 7) == 143         # ceil(1000/7) above the floor
+    assert nightly.site_budget(500, 0) == 500          # cycle clamped to >= 1 day
+
+
+def test_gate_decision_priority_order():
+    g = nightly.gate_decision
+    assert g(enabled=False, run_requested_at="x", ran_today=False, run_in_flight=False,
+             hour_utc=3, now_hour_utc=3) == (False, "disabled in board settings")
+    assert g(enabled=True, run_requested_at=None, ran_today=False, run_in_flight=True,
+             hour_utc=3, now_hour_utc=3)[0] is False       # one run at a time
+    assert g(enabled=True, run_requested_at="2026-09-06T12:00:00Z", ran_today=True,
+             run_in_flight=False, hour_utc=3, now_hour_utc=3)[0] is True   # request wins
+    assert g(enabled=True, run_requested_at=None, ran_today=True, run_in_flight=False,
+             hour_utc=3, now_hour_utc=3)[0] is False       # once per day
+    assert g(enabled=True, run_requested_at=None, ran_today=False, run_in_flight=False,
+             hour_utc=3, now_hour_utc=3)[0] is True        # the scheduled hour
+    run, reason = g(enabled=True, run_requested_at=None, ran_today=False,
+                    run_in_flight=False, hour_utc=3, now_hour_utc=14)
+    assert run is False and "heartbeat" in reason          # any other hourly fire
+
+
+def test_plan_steps_rotation_budgets_drive_due_selection():
+    plan = nightly.plan_steps(_ns("--sites", "aethelgem"), today=WED,
+                              budgets={"aethelgem": 528})
+    assert _argv(plan, "scan:aethelgem") == [
+        "scan", "--site", "aethelgem", "--select", "due", "--judge", "mantle",
+        "--limit", "528"]
+
+
+def test_plan_steps_explicit_due_without_budgets_keeps_default_limit():
+    plan = nightly.plan_steps(_ns("--sites", "sandcart", "--select", "due"), today=WED)
+    assert _argv(plan, "scan:sandcart") == [
+        "scan", "--site", "sandcart", "--select", "due", "--judge", "mantle",
+        "--limit", "25"]
+
+
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 

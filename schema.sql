@@ -85,4 +85,39 @@ CREATE TABLE IF NOT EXISTS eval_runs (
   passed BOOLEAN NOT NULL
 );
 
+-- Rotation coverage: when each slot was last probed, so the nightly rotates
+-- through the WHOLE mirror inside a configurable cycle (board /settings) instead
+-- of re-scanning the head of the snapshot forever.
+ALTER TABLE link_slots ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_slots_due
+  ON link_slots(site, status, last_checked_at NULLS FIRST, id);
+-- One-time backfill from the check history; a no-op once every row is stamped.
+UPDATE link_slots ls
+   SET last_checked_at = (SELECT max(sc.checked_at) FROM slot_checks sc
+                           WHERE sc.slot_id = ls.id)
+ WHERE ls.last_checked_at IS NULL
+   AND EXISTS (SELECT 1 FROM slot_checks sc WHERE sc.slot_id = ls.id);
+
+-- Operator-editable control plane (the board /settings page writes this row).
+-- JSON keys: rotation_cycle_days | run_hour_utc | enabled | run_requested_at |
+-- run_requested_by | updated_at | updated_by
+CREATE TABLE IF NOT EXISTS settings (
+  id TEXT PRIMARY KEY,                 -- 'main'
+  value TEXT NOT NULL,                 -- JSON object (defaults live in code)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One row per cron fire: a full run OR an honest heartbeat skip. This is what
+-- the board Settings page reads to show cron liveness / last run / trigger.
+CREATE TABLE IF NOT EXISTS nightly_runs (
+  id BIGSERIAL PRIMARY KEY,
+  kind TEXT NOT NULL,                  -- run | heartbeat
+  status TEXT NOT NULL,                -- running | ok | degraded | fail | skipped
+  reason TEXT,                         -- gate verdict / trigger note
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  summary TEXT                         -- JSON: trigger, budgets, per-step codes
+);
+CREATE INDEX IF NOT EXISTS idx_runs_started ON nightly_runs(started_at DESC);
+
 COMMIT;

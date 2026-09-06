@@ -142,3 +142,41 @@ export interface WeeklyStats {
 
 /** Status counts across the whole queue (the inbox header). */
 export type StatusCounts = Record<string, number>;
+
+/** Operator control plane: the single 'main' settings row (board /settings). */
+export interface BoardSettings {
+  rotation_cycle_days: number;
+  run_hour_utc: number;
+  enabled: boolean;
+  run_requested_at: string | null;
+  run_requested_by: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+}
+
+/** Raw `nightly_runs` row: one per cron fire (a full run OR a heartbeat skip). */
+export interface NightlyRunRow {
+  id: number;
+  kind: "run" | "heartbeat";
+  status: string;
+  reason: string | null;
+  started_at: string;
+  finished_at: string | null;
+  summary: string | null;
+}
+
+/** The cron ledger as the Settings page shows it. */
+export interface CronOverview {
+  runs: NightlyRunRow[];
+  last_fire_at: string | null;
+  heartbeat_alive: boolean;
+  last_run: NightlyRunRow | null;
+}
+
+/** Per-site rotation coverage inside the current cycle window. */
+export interface RotationRow {
+  site: string;
+  active: number;
+  covered: number;
+  oldest: string | null;
+}

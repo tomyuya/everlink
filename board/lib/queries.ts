@@ -14,13 +14,17 @@ import { assertBoardWritable, getSql } from "./db";
 import { safeJsonParse } from "./utils";
 import type {
   AuditRow,
+  BoardSettings,
+  CronOverview,
   Decision,
   DecisionRow,
   DecisionStatus,
   DecisionWithEvidence,
   LinkSlot,
+  NightlyRunRow,
   Proposal,
   RedirectHop,
+  RotationRow,
   SlotCheck,
   SlotCheckRow,
   StatusCounts,
@@ -259,4 +263,131 @@ export async function weeklyStats(days = 7): Promise<WeeklyStats> {
     decisions_created: byStatus.reduce((a, r) => a + Number(r.n ?? 0), 0),
     decisions_decided: decided[0]?.n ?? 0,
   };
+}
+
+// --------------------------------------------------------------------------- //
+// control plane — settings row + cron ledger (the board /settings page)
+//
+// The agent's nightly cron treats the `settings` row as its control plane and
+// writes one `nightly_runs` row per fire (a full run OR an honest heartbeat
+// skip). The board reads both and writes ONLY via the two guarded mutators
+// below, each audited into `audit_log` like every other board write.
+// --------------------------------------------------------------------------- //
+export const DEFAULT_SETTINGS: BoardSettings = {
+  rotation_cycle_days: 30,   // full-pass window: every active slot probed once
+  run_hour_utc: 3,           // which hourly heartbeat actually runs the chain
+  enabled: true,             // kill-switch for the cron
+  run_requested_at: null,    // board "run now" request, consumed by the next fire
+  run_requested_by: null,
+};
+
+/** A cron fire older than this means the Railway heartbeat wiring is missing. */
+export const HEARTBEAT_WINDOW_MIN = 75;
+
+const SETTINGS_KEYS = [
+  "rotation_cycle_days", "run_hour_utc", "enabled",
+  "run_requested_at", "run_requested_by", "updated_at", "updated_by",
+] as const;
+
+function parseSettings(raw: string | null): BoardSettings {
+  const out: BoardSettings = { ...DEFAULT_SETTINGS };
+  if (!raw) return out;
+  const stored = safeJsonParse<Record<string, unknown>>(raw, {});
+  for (const k of SETTINGS_KEYS) {
+    if (k in stored) (out as unknown as Record<string, unknown>)[k] = stored[k];
+  }
+  return out;
+}
+
+/** The single 'main' settings row merged over defaults (missing row = defaults). */
+export async function getSettings(): Promise<BoardSettings> {
+  const sql = getSql();
+  const rows = await query<{ value: string }[]>(
+    sql`SELECT value FROM settings WHERE id = 'main'`,
+  );
+  return parseSettings(rows[0]?.value ?? null);
+}
+
+async function writeSettings(
+  next: BoardSettings,
+  event: string,
+  by: string,
+  extra: Record<string, unknown>,
+): Promise<void> {
+  const sql = getSql();
+  await sql`INSERT INTO settings (id, value, updated_at)
+            VALUES ('main', ${JSON.stringify(next)}, now())
+            ON CONFLICT (id) DO UPDATE
+              SET value = EXCLUDED.value, updated_at = now()`;
+  await sql`INSERT INTO audit_log (agent, event, payload)
+            VALUES ('board', ${event}, ${JSON.stringify({ by, ...extra, to: next })})`;
+}
+
+/**
+ * PATCH-equivalent for the operator knobs. Validation lives in the API route;
+ * this mirrors the Python `db.set_settings` read-modify-write and audits it.
+ */
+export async function updateSettings(
+  patch: Partial<Pick<BoardSettings, "rotation_cycle_days" | "run_hour_utc" | "enabled">>,
+  by: string,
+): Promise<BoardSettings> {
+  assertBoardWritable();
+  const current = await getSettings();
+  const next: BoardSettings = {
+    ...current,
+    ...patch,
+    updated_at: new Date().toISOString(),
+    updated_by: by,
+  };
+  await writeSettings(next, "settings_change", by, { from: current });
+  return next;
+}
+
+/** Board "run now": stamps a request the NEXT cron fire consumes and clears. */
+export async function requestRun(by: string): Promise<BoardSettings> {
+  assertBoardWritable();
+  const current = await getSettings();
+  const next: BoardSettings = {
+    ...current,
+    run_requested_at: new Date().toISOString(),
+    run_requested_by: by,
+    updated_at: new Date().toISOString(),
+    updated_by: by,
+  };
+  await writeSettings(next, "run_requested", by, {});
+  return next;
+}
+
+/** The cron ledger + liveness: is the Railway heartbeat actually ticking? */
+export async function cronOverview(): Promise<CronOverview> {
+  const sql = getSql();
+  const rows = await query<NightlyRunRow[]>(
+    sql`SELECT id, kind, status, reason, started_at, finished_at, summary
+        FROM nightly_runs ORDER BY started_at DESC LIMIT 10`,
+  );
+  const lastFireMs = rows[0]?.started_at
+    ? new Date(rows[0].started_at).getTime()
+    : null;
+  return {
+    runs: rows,
+    last_fire_at: rows[0]?.started_at ?? null,
+    heartbeat_alive:
+      lastFireMs !== null &&
+      Date.now() - lastFireMs <= HEARTBEAT_WINDOW_MIN * 60_000,
+    last_run: rows.find((r) => r.kind === "run") ?? null,
+  };
+}
+
+/** Per-site rotation coverage inside the current cycle window. */
+export async function rotationCoverage(cycleDays: number): Promise<RotationRow[]> {
+  const sql = getSql();
+  const cutoff = new Date(Date.now() - cycleDays * 86_400_000).toISOString();
+  return query<RotationRow[]>(
+    sql`SELECT site,
+               count(*) FILTER (WHERE status = 'active')::int AS active,
+               count(*) FILTER (WHERE status = 'active'
+                                  AND last_checked_at >= ${cutoff}::timestamptz)::int AS covered,
+               min(last_checked_at) FILTER (WHERE status = 'active') AS oldest
+        FROM link_slots GROUP BY site ORDER BY site`,
+  );
 }
