@@ -45,13 +45,21 @@ export default async function SettingsPage() {
     if (settings) {
       try {
         overview = await cronOverview();
-      } catch {
-        schemaPending = true;
+      } catch (e) {
+        // Do NOT blame the schema for an ordinary query failure: the checklist
+        // would tell the operator to wait for a migration that already ran.
+        const message = e instanceof Error ? e.message : "Failed to read the cron ledger";
+        console.error("[settings] cronOverview failed:", message);
+        if (isSchemaMissing(message)) schemaPending = true;
+        else dbError = message;
       }
       try {
         rotation = await rotationCoverage(settings.rotation_cycle_days);
-      } catch {
-        schemaPending = true;   // link_slots.last_checked_at not migrated yet
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Failed to read rotation coverage";
+        console.error("[settings] rotationCoverage failed:", message);
+        if (isSchemaMissing(message)) schemaPending = true;   // last_checked_at not migrated yet
+        else dbError = message;
       }
     }
   }

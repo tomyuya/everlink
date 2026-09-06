@@ -384,8 +384,13 @@ export async function cronOverview(): Promise<CronOverview> {
   ]);
   const merged = new Map<number, NightlyRunRow>();
   for (const r of [...fires, ...realRuns]) merged.set(r.id, r);
+  // Compare by epoch ms, NOT by string: neon hands timestamptz back as Date
+  // objects even though the row type says string, so localeCompare() would throw
+  // (and the page would fall back to its "schema missing" branch).
   const rows = [...merged.values()]
-    .sort((a, b) => b.started_at.localeCompare(a.started_at))
+    .sort(
+      (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
+    )
     .slice(0, LEDGER_FIRE_ROWS);
   const lastFireMs = fires[0]?.started_at
     ? new Date(fires[0].started_at).getTime()
