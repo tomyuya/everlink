@@ -61,6 +61,25 @@ export function siteLabel(site?: string | null): string {
   return SITE_LABEL[site] ?? site;
 }
 
+/**
+ * Public homepage of each first-party site key, so human-facing surfaces can
+ * link a row straight to the live store it patrols (trust: the reader can
+ * click through and see the real site). Deliberately separate from the label:
+ * a deployer's own site key has neither, and an unmapped key gets NO link —
+ * the same "never guess a domain" rule as <SITE>_PUBLIC_ORIGIN.
+ */
+export const SITE_URL: Record<string, string> = {
+  aethelgem: "https://www.aethelgem.com",
+  sandcart: "https://www.flashdeals.today",
+  hotdeals: "https://www.hotdeals.today",
+};
+
+/** Public homepage for a site key (null when unmapped — never a guessed URL). */
+export function siteUrl(site?: string | null): string | null {
+  if (!site) return null;
+  return SITE_URL[site] ?? null;
+}
+
 export const VERDICT_META: Record<Verdict, { label: string; className: string }> = {
   healthy: { label: "Healthy", className: "text-emerald-600 dark:text-emerald-400" },
   dead: { label: "Dead", className: "text-rose-600 dark:text-rose-400" },

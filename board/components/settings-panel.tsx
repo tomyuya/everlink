@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { BoardSettings, RotationRow } from "@/lib/types";
+import { siteLabel, siteUrl } from "@/lib/utils";
 
 export interface SettingsPreconditions {
   db: boolean;
@@ -141,9 +142,27 @@ export function SettingsPanel({
               <tbody>
                 {rotation.map((r) => {
                   const pct = r.active > 0 ? Math.round((r.covered / r.active) * 100) : 0;
+                  const url = siteUrl(r.site);
                   return (
                     <tr key={r.site} className="border-b border-zinc-100 dark:border-zinc-800/60">
-                      <td className="py-1 pr-2 font-mono">{r.site}</td>
+                      {/* Brand name, not the internal key (sandcart -> FlashDeals),
+                          linked to the live store so a reader can click through
+                          and verify it is a real site. Unmapped keys stay plain. */}
+                      <td className="py-1 pr-2">
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Open ${siteLabel(r.site)} in a new tab`}
+                            className="font-medium text-sky-600 hover:underline dark:text-sky-400"
+                          >
+                            {siteLabel(r.site)}
+                          </a>
+                        ) : (
+                          <span className="font-mono">{siteLabel(r.site)}</span>
+                        )}
+                      </td>
                       <td className="py-1 pr-2">{r.active.toLocaleString()}</td>
                       <td className="py-1 pr-2">{siteBudget(r.active, cycle).toLocaleString()}</td>
                       <td className="py-1 pr-2">
