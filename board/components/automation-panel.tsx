@@ -88,9 +88,11 @@ export function AutomationPanel({
       </div>
 
       <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-        Nobody opens a terminal in production. The cron ticks hourly as a heartbeat; the
-        fire matching the run hour runs the whole chain once a day and every other fire
-        logs an honest heartbeat skip. Each run rotates: per-site budget ={" "}
+        Nobody opens a terminal in production. The cron fires as a heartbeat and the gate
+        decides: only the fire matching the run hour runs the whole chain, and every other
+        fire logs an honest heartbeat skip. (An hourly cron gives run-now a
+        within-the-hour pickup; a daily cron set to the run hour works too.) Each run
+        rotates: per-site budget ={" "}
         <code className="font-mono text-[11px] text-zinc-600 dark:text-zinc-300">
           ceil(active ÷ cycle)
         </code>{" "}
