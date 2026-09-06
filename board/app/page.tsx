@@ -206,14 +206,19 @@ function Hero() {
           priority
         />
         {/* Caption over the illustration's empty upper band: the two feed
-            paths in one line (Path A crawl / Path B snapshot) plus the
-            guarantee they share. HTML, not baked into the raster, so it stays
-            crisp and editable. pointer-events-none keeps it from eating clicks. */}
-        <div className="pointer-events-none absolute left-5 top-5 max-w-[85%] space-y-1">
+            paths in one line (Path A crawl / Path B snapshot). HTML, not baked
+            into the raster, so it stays crisp and editable. pointer-events-none
+            keeps it from eating clicks. */}
+        <div className="pointer-events-none absolute left-5 top-5 max-w-[85%]">
           <p className="text-sm font-semibold tracking-tight text-white drop-shadow-sm">
             Two ways in: crawl any public sitemap, or snapshot your own DB.
           </p>
-          <p className="text-[11px] leading-relaxed text-zinc-300 drop-shadow-sm">
+        </div>
+        {/* The shared guarantee sits in the OTHER empty band - between the chain
+            and the baked wordmark (~75-80% of figure height) - at a readable
+            size, instead of being crammed under the headline. */}
+        <div className="pointer-events-none absolute bottom-[20%] left-5 max-w-[90%]">
+          <p className="text-sm font-medium leading-snug text-zinc-200 drop-shadow-sm">
             Both strictly read-only &middot; a human approves every write
           </p>
         </div>
