@@ -193,12 +193,12 @@ function Hero() {
           />
           <Badge
             icon={<Globe className="h-3.5 w-3.5" />}
-            label="Zero-config crawl · any site"
+            label="Any site · zero config"
           />
         </div>
       </div>
 
-      <figure className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-900 dark:border-zinc-800">
+      <figure className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-900 dark:border-zinc-800">
         <Image
           src="/everlink-logo.png"
           alt="Illustration: a robotic arm re-welding a broken chain link between web pages"
@@ -207,6 +207,19 @@ function Hero() {
           className="h-auto w-full object-cover"
           priority
         />
+        {/* Caption over the illustration's empty upper band: the reworded
+            "any site / zero config" claim plus the two facts a first-time
+            visitor most needs (read-only, LLM-free detection, human-approved
+            writes). HTML, not baked into the raster, so it stays crisp and
+            editable. pointer-events-none keeps it from eating clicks. */}
+        <div className="pointer-events-none absolute left-5 top-5 max-w-[85%] space-y-1">
+          <p className="text-sm font-semibold tracking-tight text-white drop-shadow-sm">
+            Zero-config crawl of any site &mdash; read-only.
+          </p>
+          <p className="text-[11px] leading-relaxed text-zinc-300 drop-shadow-sm">
+            Detection needs no LLM &middot; a human approves every write
+          </p>
+        </div>
       </figure>
     </section>
   );
