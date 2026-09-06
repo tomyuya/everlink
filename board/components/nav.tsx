@@ -10,7 +10,7 @@ import { ThemeToggle } from "./theme-toggle";
 const LINKS = [
   { href: "/", label: "Home", icon: House, exact: true },
   { href: "/how-it-works", label: "How it works", icon: BookOpen, exact: false },
-  { href: "/docs", label: "Docs", icon: FileText, exact: false },
+  { href: "/docs", label: "Docs·手册", icon: FileText, exact: false },
   { href: "/inbox", label: "Inbox", icon: Inbox, exact: false },
   { href: "/audit", label: "Audit", icon: ScrollText, exact: false },
   { href: "/report", label: "Report", icon: BarChart3, exact: false },
@@ -35,9 +35,6 @@ export function Nav() {
             className="h-7 w-7 rounded-md"
           />
           <span>EverLink</span>
-          <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-            Board
-          </span>
         </Link>
         <nav className="ml-auto flex items-center gap-1">
           {LINKS.map(({ href, label, icon: Icon, exact }) => {
