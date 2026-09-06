@@ -174,7 +174,10 @@ export interface NightlyRunRow {
 export interface CronOverview {
   runs: NightlyRunRow[];
   fires: NightlyRunRow[];
+  /** Newest CRON-driven fire. A manual `--force` row is excluded: it proves the
+   * chain works, not that the Railway cron is wired. */
   last_fire_at: string | null;
+  /** `last_fire_at` falls inside HEARTBEAT_WINDOW_MIN. */
   heartbeat_alive: boolean;
   last_run: NightlyRunRow | null;
 }

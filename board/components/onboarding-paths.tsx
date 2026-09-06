@@ -4,8 +4,8 @@ import { Database, Globe } from "lucide-react";
 /**
  * The two ways EverLink gets links to patrol — generic read-only crawl (the
  * zero-config default, path A) vs first-party DB snapshot (optional deep path B).
- * Shared by the home page (above the autonomous loop) and /how-it-works (above
- * the two-database model) so the onboarding message never drifts between pages.
+ * Rendered on the landing page directly above the write-safety boundary, so the
+ * "you do NOT need to hand over your database" message lands before any config.
  * The intro is intentionally FULL-WIDTH (no max-w-prose) per design.
  */
 export function OnboardingPaths() {
@@ -19,7 +19,7 @@ export function OnboardingPaths() {
         <strong className="text-zinc-700 dark:text-zinc-300">not</strong> need access to
         your database to start. Point it at any public sitemap or page URL and it crawls
         read-only over HTTP, extracting outbound links on the fly. Connecting your own DB
-        is an <em>optional</em> deep path for block-level slots and write-back.
+        is an <em>optional</em> deep path for block-level slots.
       </p>
       <div className="grid gap-3 md:grid-cols-2">
         <PathCard
@@ -30,9 +30,9 @@ export function OnboardingPaths() {
           cmd="scan --site https://your-site.com/sitemap.xml"
           lines={[
             "Works with ANY website — no source database, no code change.",
-            "Read-only HTTP: fetches public pages and extracts outbound links live.",
+            "Read-only HTTP: crawls public pages and extracts outbound links live (defaults 25 pages / 500 slots, --max-pages).",
+            "Politeness: descriptive UA, 1 req/s rate limit, robots.txt honoured (fail-open).",
             "L1/L2 detection needs zero AWS credentials; only the Judge's fix proposals need an LLM.",
-            "Never writes back · honours robots.txt · ≤1 request per link · polite rate limit.",
           ]}
         />
         <PathCard
@@ -42,10 +42,10 @@ export function OnboardingPaths() {
           title="First-party DB snapshot — optional deep path"
           cmd="<SITE>_DATABASE_URL + scripts/export_slots.py"
           lines={[
-            "For your OWN site when you want block-level slots and write-back.",
-            "Connects STRICTLY READ-ONLY; export_slots.py writes a data/slots_<site>.csv snapshot.",
-            "Adds <SITE>_PUBLIC_ORIGIN so a relative /products/x becomes an absolute URL to probe.",
-            "Write-back stays gated (approved cards only) and whitelisted per site.",
+            "For your OWN site, when you want block-level slots (article / block / role) instead of a crawl.",
+            "export_slots.py connects STRICTLY READ-ONLY and writes data/slots_<site>.csv; the scan reads that snapshot.",
+            "<SITE>_PUBLIC_ORIGIN turns a relative /products/x into an absolute URL to probe — no domain is hardcoded.",
+            "Write-back is gated twice (approved cards only + a per-site whitelist) and lands in EverLink's own mirror; a production CMS adapter is out of scope.",
           ]}
         />
       </div>

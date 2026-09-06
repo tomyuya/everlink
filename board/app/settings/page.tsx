@@ -115,11 +115,13 @@ export default async function SettingsPage() {
               <PreconditionRow
                 ok={pre.heartbeatAlive}
                 icon={<Timer className="h-4 w-4" />}
-                label="Cron heartbeat alive (fire within 75 min)"
+                label="Cron heartbeat alive (a cron fire within 75 min)"
                 detail={
                   overview?.last_fire_at
-                    ? `last fire ${formatDateTime(overview.last_fire_at)}`
-                    : "no fire recorded yet"
+                    ? `last cron fire ${formatDateTime(overview.last_fire_at)}`
+                    : overview?.fires.length
+                      ? `no cron fire inside the window — the ${overview.fires.length} newest ledger rows are manual/local runs`
+                      : "no fire recorded yet"
                 }
               />
             </ul>

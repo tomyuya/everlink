@@ -221,7 +221,7 @@ export function SettingsPanel({
                 title={
                   pre.heartbeatAlive
                     ? "Ask the next cron fire to run the chain now"
-                    : "Needs a live cron heartbeat (a fire within 75 min)"
+                    : "Needs a live cron heartbeat (a cron fire within 75 min — a manual --force run does not count)"
                 }
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ring-1 ring-inset ring-zinc-300 hover:bg-zinc-100 disabled:opacity-40 dark:ring-zinc-700 dark:hover:bg-zinc-800"
               >

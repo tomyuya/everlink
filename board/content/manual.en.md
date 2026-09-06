@@ -576,13 +576,13 @@ existing risk-vs-benefit decision).
 
 | Page | What to look at |
 |---|---|
-| `/` | positioning badges (open-source / self-hosted / not-a-SaaS) + counters |
-| `/how-it-works` | two-database diagram + six-stage pipeline + deployer contract (static, read-only) |
+| `/` | the ONE product page: positioning badges (open-source MIT / self-hosted / not-a-SaaS), the six-stage pipeline, the automation panel with its live schedule + heartbeat state, the two feed paths, the write-safety boundary + deployer contract. (`/how-it-works` was merged into it and now 308-redirects.) |
 | `/docs` | this manual (English; `/docs/zh` for Chinese) |
 | `/inbox` | the review battlefield: status tabs + checkboxes + batch Approve/Reject bar |
 | `/decision/<id>` | one card: rationale, NEW SENTENCE, evidence chain (slot-level L1/L2), live Approve/Reject buttons (pending) or settled notice (decided) |
 | `/audit` | full audit stream, filterable (`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…) |
 | `/report` | weekly numbers (healed / created / decided), twin of CLI `report` |
+| `/settings` | the control plane: rotation cycle + per-site coverage/budget, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat), precondition checklist, cron ledger |
 
 ### 7.2 Review workflow
 

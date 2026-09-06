@@ -29,12 +29,12 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 
 | Route | Purpose |
 | --- | --- |
-| `/` | **Home** — the product at a glance: hero, live pipeline-health pulse, the six-stage pipeline diagram (Scan → Detect → Judge → You decide → Apply → Report), and the Automation panel documenting the nightly cron and its trigger commands. |
-| `/how-it-works` | **How it works** — static, read-only product primer: open-source/self-hosted positioning, the two-database model, and the deployer contract. Renders with no DB configured. |
+| `/` | **Home** — the one product page: hero + positioning badges (open-source MIT / self-hosted / not-a-SaaS), the six-stage pipeline diagram (Scan → Detect → Judge → You decide → Apply → Report), the Automation panel (live schedule, rotation budget, cron heartbeat state, entrypoint commands), the two feed paths, the write-safety boundary + deployer contract, and the dogfooding honesty note. Every DB read is optional, so it renders in full with no DB configured. Absorbed the old `/how-it-works`, which now 308-redirects here. |
 | `/inbox` | **Inbox** — the working queue: filterable card list (pending/approved/applied/rejected/all) with multi-select + **batch approve/reject**; `?status=` deep-links each filter tab. |
 | `/decision/[id]` | **Card detail** — the proposal, its rationale, and the full **evidence chain** (slot → L1 HTTP probe → redirect chain → L2 verdict → final verdict), plus single-card approve/reject. |
 | `/audit` | **Audit trail** — the append-only `audit_log`, newest first. `?event=<type>` filters to one event type (e.g. `?event=steering_cancel`, `write`, `verify`, `rollback`, `dead_letter`) with a filter chip showing the row count and a *clear filter* link — the log outgrows the page window once nightly `tool_result` traffic piles up. |
 | `/report` | **Weekly report** — live aggregates (links healed, slots fixed, decisions by status/action, audit events) over a 7/14/30-day window. pe3's scheduled digest reports these same numbers. |
+| `/settings` | **Control plane** — rotation cycle + per-site coverage/daily-budget table, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat proves the Railway wiring), the precondition checklist with the one-time Railway steps, and the cron ledger. |
 
 ## API routes
 
@@ -46,14 +46,19 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 | `PATCH /api/decisions/[id]` | `{ action, reason? }` | single decide → `409` if not pending |
 | `GET /api/audit` | `?limit=` | `{ audit }` |
 | `GET /api/report` | `?days=` | `WeeklyStats` |
+| `POST /api/settings` | `{ rotation_cycle_days?, run_hour_utc?, enabled? }` | patch the control plane → `400` on an empty/invalid patch, `403` read-only |
+| `POST /api/settings/run-now` | — | stamp a run-now request for the next cron fire → `409` while no cron heartbeat is alive |
 
 ## Safety
 
-- **Reads**: `decisions`, `slot_checks`, `audit_log`, `link_slots` — EverLink's own operational tables.
-- **Writes**: the board's *only* mutation is a decision **status transition**
+- **Reads**: `decisions`, `slot_checks`, `audit_log`, `link_slots`, `settings`, `nightly_runs` —
+  EverLink's own operational tables.
+- **Writes**: two kinds, both audited. A decision **status transition**
   (`pending → approved | rejected`), always scoped `WHERE status = 'pending'` so a
-  stale/double click can never re-decide a settled card. It **never** writes source content
-  and **never** runs DDL.
+  stale/double click can never re-decide a settled card; and the **control plane**
+  (the single `settings` row, plus a `run_requested` stamp the next cron fire consumes),
+  each written with an `audit_log` row (`settings_change` / `run_requested`). The board
+  **never** writes source content and **never** runs DDL.
 - **Guard**: every write calls `assertBoardWritable()` ([`lib/db.ts`](lib/db.ts)), mirroring the
   Python `db._assert_writable` deny-list — a DSN whose host matches `EVERLINK_FORBIDDEN_HOSTS`
   is refused with `403` before any SQL runs. The board does not hold the source-site DSNs.

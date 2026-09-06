@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpen, FileText, House, Inbox, ScrollText, Settings } from "lucide-react";
+import { BarChart3, FileText, House, Inbox, ScrollText, Settings } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 
+/**
+ * The product primer used to be its own tab (/how-it-works). It shared three
+ * whole components with Home and repeated the same pitch, so it was merged into
+ * "/" and now 308-redirects (next.config.ts) — one less tab, no dead link.
+ */
 const LINKS = [
   { href: "/", label: "Home", icon: House, exact: true },
-  { href: "/how-it-works", label: "How it works", icon: BookOpen, exact: false },
   { href: "/docs", label: "Docs·手册", icon: FileText, exact: false },
   { href: "/inbox", label: "Inbox", icon: Inbox, exact: false },
   { href: "/audit", label: "Audit", icon: ScrollText, exact: false },

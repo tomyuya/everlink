@@ -15,7 +15,8 @@ compact decision card **only when a human judgment is actually needed**.
 > **Live demo (fully interactive):** <https://everlink-seven.vercel.app> — the maintainer's own
 > deployment, carrying the real nightly patrol output for his three sites (plus labelled
 > seeded-replay cards, so the queue is never empty for a reviewer). Suggested path: the
-> landing page → **`/how-it-works`** (product primer) → **`/inbox`** (decision queue,
+> landing page (product primer, pipeline, automation state and the deployer contract —
+> all one page) → **`/inbox`** (decision queue,
 > `?status=` filters) → a card's evidence chain → **`/audit?event=steering_cancel`** (the
 > guardrail firing — one filter away from ~2,000 rows of nightly traffic that keep
 > growing every night, where those 3 rows would otherwise be buried) → **`/report`**.
@@ -47,15 +48,15 @@ it through environment variables:
 
 | # | You provide | How to configure | Why it's needed |
 |---|-------------|------------------|-----------------|
-| 1 | Your site's database (**read-only**) | env `<SITE>_DATABASE_URL` | The data source — the links to patrol are read from here |
+| 1 | Your site's database (**read-only**, optional) | env `<SITE>_DATABASE_URL` | Deep path B only — block-level slots instead of a crawl. The generic crawl (path A) needs no DB access at all |
 | 2 | Your site's **public origin** | env `<SITE>_PUBLIC_ORIGIN` | Turns an internal relative link `/products/x` into an absolute URL before probing |
 | 3 | EverLink's own database | env `EVERLINK_DATABASE_URL` | Stores the patrol data (decision cards / audit trail / check records) |
-| 4 | An LLM | AWS Bedrock credentials | The reasoning brain for the Judge / Writer agents |
-| 5 | A timer | Railway cron `0 3 * * *` (or any schedule) | Triggers the nightly patrol |
+| 4 | An LLM (optional) | AWS Bedrock credentials | The reasoning brain for the Judge / Writer agents; scan + L1/L2 detection need none |
+| 5 | A timer | Railway cron `0 * * * *` (or any schedule) | Fires hourly as a heartbeat; the chain itself runs once a day at the hour set on the board's `/settings` |
 
 `<SITE>` is the key you give your own site (in the examples: `AETHELGEM` / `SANDCART` /
 `HOTDEALS` — `SANDCART` is the legacy site key of the **FlashDeals** storefront). Full step-by-step runbook: **[`DEPLOYMENT.md`](DEPLOYMENT.md)**; visual
-explainer: the board's **`/how-it-works`** page.
+explainer: the board's landing page (**`/`** — `/how-it-works` 308-redirects there).
 
 ## The two databases (the key to understanding EverLink)
 

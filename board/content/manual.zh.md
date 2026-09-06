@@ -538,12 +538,12 @@ board 展示层已有映射；不做物理重命名（风险 > 收益的既有�
 
 | 页面 | 看什么 |
 |---|---|
-| `/` | 定位三徽章（开源/自托管/非 SaaS）+ 计数总览 |
-| `/how-it-works` | 双库模型图 + 六阶段流水线 + 部署者契约（只读静态页） |
+| `/` | 唯一产品页：定位三徽章（开源 MIT / 自托管 / 非 SaaS）+ 六阶段流水线 + 自动化面板（实时排程与心跳状态）+ 两种接入路径 + 写入安全边界与部署者契约。（原 `/how-it-works` 已合并至此，308 永久重定向。） |
 | `/inbox` | 审核主战场：状态页签（Pending/Approved/Applied/Rejected/All）+ 勾选框 + 批量 Approve/Reject 条 |
 | `/decision/<id>` | 单卡详情：提案理由、NEW SENTENCE、证据链（slot 级 L1/L2 证据）、Approve/Reject 真按钮（pending 卡）或 settled 提示（已决卡） |
 | `/audit` | 全链路审计流，可按事件过滤（`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…） |
 | `/report` | 周报数字（healed / created / decided），与 CLI `report` 同构 |
+| `/settings` | 控制面：轮换周期与各站覆盖率/日预算、跑批小时（UTC）、cron 总开关、Run now（需先有活的 cron 心跳）、前置条件清单、cron 台账 |
 
 ### 7.2 审核流程
 

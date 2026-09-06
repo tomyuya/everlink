@@ -362,12 +362,28 @@ export async function requestRun(by: string): Promise<BoardSettings> {
   return next;
 }
 
+/** Reasons `nightly.py` records when a HUMAN bypassed the schedule gate.
+ *
+ * Such a row proves the chain works; it says nothing about whether the Railway
+ * cron is wired. Counting it as a heartbeat let one local `--force` rehearsal
+ * keep /settings and the landing page claiming "heartbeat alive" for the whole
+ * 75-minute window — observed in production on 2026-09-06, when the ledger held
+ * three manual rows and zero cron fires.
+ */
+const MANUAL_TRIGGERS = new Set(["--force", "no-DB (offline smoke)"]);
+
+/** True when a ledger row could only have come from an actual cron fire. */
+function isCronFire(row: NightlyRunRow): boolean {
+  return !MANUAL_TRIGGERS.has((row.reason ?? "").trim());
+}
+
 /** The cron ledger + liveness: is the Railway heartbeat actually ticking?
  *
  * An hourly cron logs ~23 heartbeat skips a day, so `runs` merges the newest
  * fires with the newest REAL runs: a fire-only window would push the last full
  * run off the page within hours and /settings could no longer answer "did it
- * run?". `fires` stays fire-only because liveness must count every tick.
+ * run?". `fires` stays fire-only because liveness must count every tick — but
+ * only the CRON-driven ones (see isCronFire), never a manual bypass.
  */
 export async function cronOverview(): Promise<CronOverview> {
   const sql = getSql();
@@ -392,16 +408,18 @@ export async function cronOverview(): Promise<CronOverview> {
       (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
     )
     .slice(0, LEDGER_FIRE_ROWS);
-  const lastFireMs = fires[0]?.started_at
-    ? new Date(fires[0].started_at).getTime()
+  const cronFires = fires.filter(isCronFire);
+  const lastCronFire = cronFires[0] ?? null;
+  const lastCronFireMs = lastCronFire
+    ? new Date(lastCronFire.started_at).getTime()
     : null;
   return {
     runs: rows,
     fires,
-    last_fire_at: fires[0]?.started_at ?? null,
+    last_fire_at: lastCronFire?.started_at ?? null,
     heartbeat_alive:
-      lastFireMs !== null &&
-      Date.now() - lastFireMs <= HEARTBEAT_WINDOW_MIN * 60_000,
+      lastCronFireMs !== null &&
+      Date.now() - lastCronFireMs <= HEARTBEAT_WINDOW_MIN * 60_000,
     last_run: realRuns[0] ?? null,
   };
 }
