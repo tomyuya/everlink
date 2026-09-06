@@ -34,7 +34,7 @@ EverLink 是一个**自主链接腐烂（link-rot）巡检 agent**：每天定�
 人类只审批风险决策，其余全自动——这是 AWS "Agents for Humans" 黑客松的命题核心。
 
 > **两条数据来路（先记住这条，别被"双库"误导成"必须接库"）**：EverLink 起步**不需要**接你的数据库。
-> - **路径 A · generic 只读爬取（默认，零配置）**：`scan --site <你站的 sitemap/页面 URL>`
+> - **路径 A · generic 只读爬取（默认，无需源库）**：`scan --site <你站的 sitemap/页面 URL>`
 >   以只读 HTTP 抓公开网页、现场提取外链生成 slot——**任何网站都可用、零代码、L1/L2 检测零 AWS 凭证、永不写回**，
 >   遵守 robots.txt、≤1 请求/链接、礼貌限速。这是新用户的默认上手路径（详见 §6.1）。
 > - **路径 B · 第一方库快照（可选，深度）**：只读接**你自己的**源库（`<SITE>_DATABASE_URL` +
@@ -547,7 +547,7 @@ board 展示层已有映射；不做物理重命名（风险 > 收益的既有�
 
 | 页面 | 看什么 |
 |---|---|
-| `/` | 唯一产品页：定位四徽章（开源 MIT / 自托管非 SaaS / AWS Strands SDK + Bedrock / 零配置抓取任意站点）+ 六阶段流水线 + 自动化面板（实时排程，以及台账最近一次运行的原样引用——含触发方式与来源，本地排练不会被误读为无人值守的 cron 运行）+ 两种接入路径 + 写入安全边界与部署者契约。（原 `/how-it-works` 已合并至此，308 永久重定向。） |
+| `/` | 唯一产品页：定位三徽章（开源 MIT / 自托管非 SaaS / AWS Strands SDK + Bedrock）+ 六阶段流水线 + 自动化面板（实时排程，以及台账最近一次运行的原样引用——含触发方式与来源，本地排练不会被误读为无人值守的 cron 运行）+ 两种接入路径 + 写入安全边界与部署者契约。（原 `/how-it-works` 已合并至此，308 永久重定向。） |
 | `/inbox` | 审核主战场：状态页签（Pending/Approved/Applied/Rejected/All）+ 勾选框 + 批量 Approve/Reject 条 |
 | `/decision/<id>` | 单卡详情：提案理由、NEW SENTENCE、证据链（slot 级 L1/L2 证据）、Approve/Reject 真按钮（pending 卡）或 settled 提示（已决卡） |
 | `/audit` | 全链路审计流，可按事件过滤（`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…） |

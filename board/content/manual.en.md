@@ -37,7 +37,7 @@ else is autonomous — the core thesis of the AWS "Agents for Humans" hackathon.
 
 > **Two ways to feed it (remember this first — don't let "two databases" mislead you into
 > thinking you must wire up a DB)**: EverLink does **not** need access to your database to start.
-> - **Path A · generic read-only crawl (the default, zero config)**: `scan --site <your
+> - **Path A · generic read-only crawl (the default, no source DB)**: `scan --site <your
 >   sitemap / page URL>` fetches public pages over read-only HTTP and extracts outbound
 >   links live — **works with ANY website, no code change, L1/L2 detection needs zero AWS
 >   credentials, never writes back**, honours robots.txt, ≤1 request per link, polite rate
@@ -586,7 +586,7 @@ existing risk-vs-benefit decision).
 
 | Page | What to look at |
 |---|---|
-| `/` | the ONE product page: the four positioning badges (open-source MIT / self-hosted, not a SaaS / AWS Strands SDK + Bedrock / zero-config crawl of any site), the six-stage pipeline, the automation panel with its live schedule and the newest ledger run quoted verbatim — trigger and origin included, so a laptop rehearsal cannot be read as an unattended cron run — the two feed paths, the write-safety boundary + deployer contract. (`/how-it-works` was merged into it and now 308-redirects.) |
+| `/` | the ONE product page: the three positioning badges (open-source MIT / self-hosted, not a SaaS / AWS Strands SDK + Bedrock), the six-stage pipeline, the automation panel with its live schedule and the newest ledger run quoted verbatim — trigger and origin included, so a laptop rehearsal cannot be read as an unattended cron run — the two feed paths, the write-safety boundary + deployer contract. (`/how-it-works` was merged into it and now 308-redirects.) |
 | `/docs` | this manual (English; `/docs/zh` for Chinese) |
 | `/inbox` | the review battlefield: status tabs + checkboxes + batch Approve/Reject bar |
 | `/decision/<id>` | one card: rationale, NEW SENTENCE, evidence chain (slot-level L1/L2), live Approve/Reject buttons (pending) or settled notice (decided) |
@@ -722,7 +722,7 @@ or all links are internal (add `--include-internal`).
 | snapshot / rollback / dead-letter | before-write snapshot / auto-revert on failed re-probe / return the card to rejected + audit |
 | StubModel / Mantle | offline deterministic fake model (tests/evals) / AWS Bedrock's OpenAI-compatible gateway (production Judge path, qwen) |
 | seed | deterministic demo replay dataset, tagged `demo-seed`, cleanly removed with `--reset` |
-| generic crawl (path A) | the zero-config default: read-only HTTP crawl of any sitemap/page URL, no source DB, never writes back |
+| generic crawl (path A) | the no-source-DB default: read-only HTTP crawl of any sitemap/page URL, no source DB, never writes back |
 | ProductionWriteRefused | write-guard exception raised when a DSN points at a source/denied host — protects production DBs |
 
 Related docs: repo `README.md` / `DEPLOYMENT.md` / `ARCHITECTURE.md` / `DEVPOST.md` /

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Boxes, Globe, ShieldCheck, Sparkles } from "lucide-react";
+import { Boxes, ShieldCheck, Sparkles } from "lucide-react";
 
 import { AutomationPanel, type ScheduleState } from "@/components/automation-panel";
 import { DeployContract } from "@/components/deploy-contract";
@@ -44,14 +44,16 @@ export default async function HomePage() {
     <div className="space-y-8">
       <Hero />
 
+      {/* Feeding it FIRST: the two ways links get in (Path A crawl / Path B
+          snapshot) set up the loop below, and carry the "you do NOT need to
+          hand over your database" message before any config or requirements. */}
+      <OnboardingPaths />
+
       {/* The loop, then how the loop runs itself — one continuous story. */}
       <Pipeline />
       <AutomationPanel lastActivity={lastActivity} schedule={schedule} />
 
-      {/* Feeding it, then hosting it. OnboardingPaths carries the "you do NOT
-          need to hand over your database" message, so it must land before the
-          requirements below. */}
-      <OnboardingPaths />
+      {/* Hosting it: the write-safety boundary + deployer contract. */}
       <DeployContract />
 
       <ExampleDeploymentNote />
@@ -191,10 +193,6 @@ function Hero() {
             icon={<Sparkles className="h-3.5 w-3.5" />}
             label="AWS Strands SDK + Bedrock"
           />
-          <Badge
-            icon={<Globe className="h-3.5 w-3.5" />}
-            label="Any site · zero config"
-          />
         </div>
       </div>
 
@@ -207,17 +205,16 @@ function Hero() {
           className="h-auto w-full object-cover"
           priority
         />
-        {/* Caption over the illustration's empty upper band: the reworded
-            "any site / zero config" claim plus the two facts a first-time
-            visitor most needs (read-only, LLM-free detection, human-approved
-            writes). HTML, not baked into the raster, so it stays crisp and
-            editable. pointer-events-none keeps it from eating clicks. */}
+        {/* Caption over the illustration's empty upper band: the two feed
+            paths in one line (Path A crawl / Path B snapshot) plus the
+            guarantee they share. HTML, not baked into the raster, so it stays
+            crisp and editable. pointer-events-none keeps it from eating clicks. */}
         <div className="pointer-events-none absolute left-5 top-5 max-w-[85%] space-y-1">
           <p className="text-sm font-semibold tracking-tight text-white drop-shadow-sm">
-            Zero-config crawl of any site &mdash; read-only.
+            Two ways in: crawl any public sitemap, or snapshot your own DB.
           </p>
           <p className="text-[11px] leading-relaxed text-zinc-300 drop-shadow-sm">
-            Detection needs no LLM &middot; a human approves every write
+            Both strictly read-only &middot; a human approves every write
           </p>
         </div>
       </figure>

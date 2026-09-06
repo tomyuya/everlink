@@ -3,16 +3,16 @@ import { Database, Globe } from "lucide-react";
 
 /**
  * The two ways EverLink gets links to patrol — generic read-only crawl (the
- * zero-config default, path A) vs first-party DB snapshot (optional deep path B).
- * Rendered on the landing page directly above the write-safety boundary, so the
- * "you do NOT need to hand over your database" message lands before any config.
+ * no-source-DB default, path A) vs first-party DB snapshot (optional deep path B).
+ * Rendered on the landing page directly ABOVE the pipeline, so the "you do NOT
+ * need to hand over your database" message lands before the loop it feeds.
  * The intro is intentionally FULL-WIDTH (no max-w-prose) per design.
  */
 export function OnboardingPaths() {
   return (
     <section aria-label="Two ways to feed EverLink" className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        Two ways to feed it · start with zero config
+        Two ways to feed it · no database required to start
       </h2>
       <p className="text-[12px] leading-relaxed text-zinc-500 dark:text-zinc-400">
         EverLink does{" "}
@@ -26,7 +26,7 @@ export function OnboardingPaths() {
           n="A"
           tone="default"
           icon={<Globe className="h-4 w-4" />}
-          title="Generic read-only crawl — the default, zero config"
+          title="Generic read-only crawl — the default, no source DB"
           cmd="scan --site https://your-site.com/sitemap.xml"
           lines={[
             "Works with ANY website — no source database, no code change.",
