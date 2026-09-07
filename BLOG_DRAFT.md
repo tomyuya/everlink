@@ -156,7 +156,7 @@ the moment that gate clears, as do `AnthropicModel`, `GeminiModel`, `MistralMode
 env-overridable, so moving between Claude variants or cross-region inference profiles is
 zero code change.
 
-The whole 312-test suite *and* the 50-case Evals run on an injected offline `StubModel`,
+The whole 319-test suite *and* the 50-case Evals run on an injected offline `StubModel`,
 which is the real proof of provider-independence: the orchestration is exercised with no
 cloud dependency at all.
 

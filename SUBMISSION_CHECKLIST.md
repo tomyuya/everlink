@@ -23,22 +23,22 @@ click submit on Devpost). Those stay open by design and are the last mile.
 - [x] **3. Architecture Diagram** — [`ARCHITECTURE.md`](ARCHITECTURE.md), 6 Mermaid views
       rendered natively by GitHub (pg1 · `de01ec1`).
       - [ ] (owner) also upload it to Devpost's *separate* "Architecture Diagram" field.
-- [ ] (owner) **4. Demo video ≤ 5:00** — three-act pitch: intro (positioning / scale /
-      problem / who / why / principle / resources title cards) → how to use it
-      (`/how-it-works`) → live demo (spec §11 storyboard, re-cut 2026-09-05). Narration →
-      [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md); second-by-second shot list,
-      live URLs, measured timings and the pre-record checklist →
-      [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md). All 15 shots were rehearsed end-to-end against
-      the live board on **2026-09-05** (real mantle judge, 39s; every board URL DOM-verified),
-      so recording is a straight replay of that rehearsal — pressing record is the only owner
-      step left.
+- [ ] (owner) **4. Demo video ≤ 5:00** — three-act pitch, re-cut 2026-09-07 to a two-demo
+      focus: intro title cards (positioning / scale / problem / who / why-an-agent / **track** / principle /
+      resources) → how-to + the two feed paths on `/` → **Demo 1 Path B**
+      (operate→process→show: live Bedrock judge, inbox, steering/verify/rollback, evals)
+      and **Demo 2 Path A** (generic read-only crawl of an unseen site). Narration measured
+      **4:57** → [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) + `docs/video/vo_full.*`; shot list,
+      live URLs, measured timings and the pre-record checklist → the repo cue sheet /
+      [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md); per-shot dwell / scroll / cut timing →
+      [`DEMO_STORYBOARD.md`](DEMO_STORYBOARD.md). Pressing record is the only owner step left.
 - [ ] (owner) **5. AWS Builder ID** — registered, and **$200 credits** claimed.
 - [x] **6. Live demo link** *(bonus)* — **https://everlink-seven.vercel.app** (Vercel board +
       Neon Postgres + Railway nightly cron; scaffold pf1 · `9f05e30`, seed dataset pf2 ·
       `723668b` keeps the inbox non-empty). **Fully interactive**: an anonymous reviewer can
       approve/reject any pending card for real; the nightly worker executes approved cards
       through the gated Writer path against EverLink's own mirror store — source-site
-      production DBs stay strictly read-only. Public pages: `/` landing · `/how-it-works` primer · `/inbox` (`?status=`) ·
+      production DBs stay strictly read-only. Public pages: `/` landing+primer · `/inbox` (`?status=`) ·
       `/decision/[id]` evidence chain · `/audit` (`?event=`) · `/report`.
       - [ ] (owner) paste the URL into Devpost's live-demo field.
 - [ ] (owner) **7. builder.aws.com blog post** *(bonus)* — title **must contain "Agents for
@@ -76,9 +76,9 @@ click submit on Devpost). Those stay open by design and are the last mile.
 
 | Criterion | Where we score it | Status |
 |---|---|---|
-| Technological Implementation | Strands multi-agent (Orchestrator→Scanner→Judge→Writer), Hooks (audit + write gate), Evals (50-case), a real Bedrock model (qwen via the Mantle gateway; direct Claude allowlist-gated), OpenTelemetry tracing; AgentCore documented as stretch | [x] |
-| Design | Decision Board UX (Next.js): public landing + `/how-it-works` primer, filterable `/inbox` (`?status=`), evidence-chain card detail, navigable audit trail (`?event=`), weekly `/report`; Structured-Output `Proposal` cards; two-track Interrupt approval flow | [x] |
-| Potential Impact | `verify_fix` re-probe + snapshot rollback closes the loop on real production links (23,476-slot Phase A dataset) | [x] |
+| Technological Implementation | Strands multi-agent (Orchestrator→Scanner→Judge→Writer), Hooks (audit + write gate), Evals (50-case), a real Bedrock model (qwen via the Mantle gateway; direct Claude allowlist-gated), OpenTelemetry tracing, cadence-aware cron heartbeat, Path A share-skip + sitemap-index reporting; AgentCore documented as stretch | [x] |
+| Design | Decision Board UX (Next.js): public landing (`/`, which absorbed the old `/how-it-works`) as the primer, filterable `/inbox` (`?status=`), evidence-chain card detail, navigable audit trail (`?event=`), weekly `/report`; Structured-Output `Proposal` cards; two-track Interrupt approval flow | [x] |
+| Potential Impact | `verify_fix` re-probe + snapshot rollback closes the loop on real production links (23,476-slot Phase A dataset); by estimate hands back **~six hours a week** of link maintenance **[EST.]** | [x] |
 | Creativity & Originality | 4 Steering policies (Disclosure / Editorial / Scope / Write) | [x] |
 | Presentation | ≤5min video, storyboard, live demo, blog | [ ] (owner) — artifacts drafted; recording/publish pending |
 
@@ -98,9 +98,9 @@ click submit on Devpost). Those stay open by design and are the last mile.
 ---
 
 **Bottom line.** Every engineering deliverable through Phase **G** is implemented,
-tested (**312** passing tests — `pytest -q` re-run 2026-09-05: 312 passed in 44.2s, fully
+tested (**319** passing tests — `pytest -q` re-run 2026-09-07: 319 passed in 43.8s, fully
 offline), committed, and pushed, and the **live board is deployed**
-(https://everlink-seven.vercel.app, read-only). The secrets zero-leak audit **passes**.
+(https://everlink-seven.vercel.app, **fully interactive** — see item 6; writes land only in EverLink's own mirror store, source DBs stay read-only). The secrets zero-leak audit **passes**.
 What remains is the human last mile: AWS Builder ID, flipping the repo public, recording the
 demo video (rehearsed end-to-end — press record and replay [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md)),
 publishing the blog, and clicking submit on Devpost — each with its draft/artifact already

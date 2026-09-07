@@ -29,7 +29,8 @@ I run three content sites. Between them they carry **23,476 outbound link slots*
 cards, affiliate links, references. The last time every one of them was checked by hand?
 **Never.** They rot a little every day: a product 404s, an affiliate program quietly ends,
 a price drifts from the sentence that cites it. Readers notice before I do, and every stale
-link costs trust, SEO, and commission.
+link costs trust, SEO, and commission. By my estimate the loop hands back about **six
+hours a week [EST.]** of link maintenance.
 
 The tools that exist are broken-link *checkers*. They **report** which links are dead. Not
 one of them **decides what to do** — replace the URL, rewrite the anchor, rewrite the whole
@@ -99,13 +100,14 @@ Mantle gateway today; direct Claude the moment the account's allowlist gate clea
   which bypasses the account-level Anthropic allowlist gate that blocks direct SigV4
   Claude), and the same seam accepts `BedrockModel` / Anthropic / OpenAI / Gemini /
   Mistral / Ollama / LiteLLM / SageMaker providers or a `ModelRouter` failover. The entire
-  312-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
+  319-test suite and the 50-case Evals run offline on an injected `StubModel` — the real
   proof of provider-independence.
 - **OpenTelemetry** — optional tracing renders a run as one span tree (`run → {detect,
   judge, score}`), with Strands' own model/tool spans nested under the judge.
 - **Deploy** — Next.js board on Vercel (**live:** https://everlink-seven.vercel.app), Neon
   Postgres store, nightly cron on Railway (AgentCore runtime as the stretch path). The board
-  opens on a public landing page and a static **`/how-it-works`** primer — open-source /
+  opens on a public landing page that doubles as the primer (**`/`**; `/how-it-works`
+    308-redirects there) — open-source /
   self-hosted positioning, the two-database model, and the deployer contract, rendered with
   no DB configured, so a reviewer can read what EverLink *is* before touching any data. The
   public deployment is **fully interactive**: a reviewer can approve or reject any pending
@@ -139,8 +141,15 @@ Mantle gateway today; direct Claude the moment the account's allowlist gate clea
   prove the oracle isn't vacuous.
 - The **closed loop**: `verify_fix` re-probes after every write and rolls back on failure.
   On the seeded demo night, 37 dead links verify back to zero — and I show a rollback too.
-- **312 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
+- **319 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
   EverLink has never seen; a seeded live board so a judge never opens an empty inbox.
+- A **cadence-aware cron heartbeat**: the board infers the cron's real period from the
+  ledger's fire gaps instead of assuming hourly, so a healthy daily cron reads alive all
+  day while Run-now stays gated on a confirmed sub-hourly cadence — no more false "cron
+  is dead" alarms.
+- **Path A signal quality**: the generic crawl skips social-share endpoints (which always
+  block datacenter IPs and drown real links in `needs_human_recheck`) and reports sitemap
+  indexes honestly instead of a misleading zero-slot message.
 - Six Mermaid **architecture diagrams** rendered natively on GitHub, and a secrets-clean
   repo (only `.env.example`, placeholders, gitignored data snapshots).
 
@@ -186,11 +195,14 @@ the inbox stays deliberately minimal — one screen, not a suite.
 - **Live demo:** https://everlink-seven.vercel.app — fully interactive public deployment
   (approve/reject live; approved cards are executed by the nightly worker against EverLink's
   own mirror store — source-site DBs stay strictly read-only). Reviewer path:
-  `/how-it-works` → `/inbox` (16 pending) → `/inbox?status=rejected` (69, every one carrying
+  `/` → `/inbox` (16 pending) → `/inbox?status=rejected` (69, every one carrying
   a reason) → `/audit?event=steering_cancel` (3 rows, filter chip) → `/report` (37 healed).
-- **Demo video:** *(owner: ≤ 5:00, three acts — intro title cards (positioning, principle,
-  resources), a how-to-use pass over `/how-it-works`, then the live demo; shot list and
-  second-by-second cues in
-  [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md), narration in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md);
-  both rehearsed end-to-end against the live board on 2026-09-05)*
+- **Demo video:** *(owner: ≤ 5:00 — narration measured **4:57**. Three acts: intro title
+  cards (positioning / scale / problem / who / why / principle / resources), a how-to +
+  two-feed-paths pass over `/`, then **two demos walked operate→process→show**: Path B
+  (first-party snapshot → live Bedrock judge → inbox → steering/verify/rollback → evals)
+  and Path A (generic read-only crawl of an unseen site). Narration in
+  [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) + `docs/video/vo_full.*`; shot list and
+  second-by-second cues in [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md) / the repo cue sheet;
+  re-cut 2026-09-07)*
 - **Blog:** *(owner: builder.aws.com URL once published, from `BLOG_DRAFT.md`)*

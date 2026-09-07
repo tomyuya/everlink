@@ -185,7 +185,7 @@ Three providers ship in-repo:
 |---|---|---|
 | `llm.get_mantle_model()` → `OpenAIModel` | **real LLM (qwen) via the Bedrock Mantle gateway** (`bedrock-mantle.<region>.api.aws`) — the **deployed production judge** | `--judge mantle`, the live nightly (verified green 2026-09-04: 3 sites × 25 slots, real proposals) |
 | `llm.get_model()` → `BedrockModel` | real Claude via Amazon Bedrock (direct SigV4) | `verify_bedrock.py`, `--judge bedrock`, once the account's Anthropic allowlist gate clears |
-| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 312-test suite, all offline Evals, `--dry-run` — **no longer** the production judge |
+| `llm.StubModel` | offline, deterministic `Model` (scripted text + fixed structured output) | the 319-test suite, all offline Evals, `--dry-run` — **no longer** the production judge |
 
 **The swap experiment.** Because the seam is one injected `Model`, changing provider is a
 one-line change with no pipeline edit:
@@ -238,7 +238,7 @@ emits real structured proposals (REWRITE_SENTENCE / DROP_BLOCK / ESCALATE) whose
 refuses to fabricate replacement URLs. `StubModel` stays first-class for the offline
 test/eval suite, but is **no longer** what runs in production.
 
-**Offline proof of provider-independence:** the entire 312-test suite *and* the 50-case
+**Offline proof of provider-independence:** the entire 319-test suite *and* the 50-case
 Evals run on the injected `StubModel`, so the orchestration, steering, hooks, queue, and
 card merge are exercised with no cloud dependency. `scripts/verify_bedrock.py` is the one
 operator step that swaps in real Claude and confirms a live call (creds → model → real

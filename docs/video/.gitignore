@@ -1,0 +1,7 @@
+# Keep the repo lean: the narration TEXT + subtitle TIMINGS are the reviewable
+# artifacts (referenced by DEMO_SCRIPT.md / DEMO_RUNSHEET.md). The raw screen
+# recording, synthesized audio, and deprecated draft segments stay local.
+*
+!.gitignore
+!vo_full.txt
+!vo_full.vtt

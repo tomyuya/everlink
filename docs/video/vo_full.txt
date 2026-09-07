@@ -1,0 +1,31 @@
+EverLink is an open-source, self-hosted link-rot steward. Checkers only report — EverLink decides, and you approve.
+
+These are my three content sites: twenty-three thousand outbound link slots. The last time every one was checked by hand? Never.
+
+They rot a little every day, and nobody sees it until a reader does. So an agent patrols them.
+
+Who it's for: independent publishers and small content teams — we're entering the Professional Agents track. Why an agent: decide-and-escalate is repetitive, judgment-heavy work — exactly what an agent should take on.
+
+The principle in three lines. Patrol: every outbound link, every night. Decide: a real LLM Judge on Amazon Bedrock drafts the fix, constrained by four Steering policies. Act and prove: apply, re-verify, roll back on failure — every step in a public audit trail.
+
+Open source under MIT: github dot tomyuya slash everlink. And a live example: everlink-seven dot vercel dot app.
+
+How you use it: clone it, deploy it on your own infrastructure. Links get in two ways. Path A: a generic read-only crawl of any website — no database, no credentials, never writes back. Path B: a read-only snapshot of your own database, unlocking block-level fixes and gated write-back. Your source database stays strictly read-only either way.
+
+Demo one: Path B, the full loop on my own site — the nightly cron's loop, run by hand, dry-run, so nothing is written. I type: everlink scan, site aethelgem, judge mantle, dry-run, limit six. A Scanner agent pulls each link slot from my database snapshot and probes it — L1 HTTP status and redirect-chain analysis first, then an L2 stealthy page parse only where L1 is inconclusive. A Judge agent — a real LLM on Amazon Bedrock — reads that evidence and drafts a structured Proposal: replace this URL, rewrite that anchor, or escalate. Anything blocked or timed out is flagged needs-human-recheck: the agent knows its limits and never fabricates.
+
+The scan report lands: real proposals scrolling, each with its evidence chain. Then the morning brief: sixteen problem slots, pushed to me as a notification, not an app.
+
+The only screen I open: the decision inbox. Sixteen cards wait, each with its evidence and its proposed fix. I approve the safe ones in a batch; I read the risky ones individually. Rejections carry a typed why — and the agent remembers it, so it won't re-propose the same fix next week.
+
+Two guards matter most. This disclosure block is dead — but deleting it is a legal disaster, so a Steering policy cancels the drop and the audit logs steering-cancel. And when I approve a fix, the Writer snapshots the block, applies in one transaction, then re-probes the new link to prove it's alive. If verification fails, it rolls back and dead-letters the decision. Last night: thirty-seven links healed, verified back to zero.
+
+And I don't ask you to trust the agent — I test it. A fifty-case eval suite runs offline against known ground truth: detection one hundred percent, steering violations zero, three hard metrics at one hundred percent. And the oracle is proven non-vacuous.
+
+Demo two: Path A, the generic read-only crawl. No database, no code change, no credentials. I point it at a site EverLink has never seen: everlink scan, site blog dot python dot org, include-internal, dry-run, limit eight.
+
+Watch it work. It honours robots.txt, fetches the sitemap — and if that's an index, it says so and expands one — crawls a few pages, extracts every outbound link, skips social-share and same-site links as noise, then probes each survivor over read-only HTTP: at most one request per link, politely rate-limited. No LLM, no credentials, and it never writes back — not here, not anywhere.
+
+The payoff: a plain link-rot report in the terminal — every outbound slot with its HTTP verdict, a healthy count, and the honesty line: read-only, nothing written. That is the whole point of Path A: any website, a real report in under a minute, zero setup. Path B goes deeper — block-level fixes and write-back on your own site. Path A is the door; Path B is the house.
+
+EverLink patrols twenty-three thousand links so I don't have to. It's honest about its limits, never touches my disclosures, verifies its own fixes, and hands me back about six hours a week. Built with the Strands Agents SDK and Amazon Bedrock for Agents for Humans. You approve decisions, not links.

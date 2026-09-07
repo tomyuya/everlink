@@ -1,272 +1,199 @@
-# EverLink — Demo Video Script (Phase H, ≤ 5:00, three-act)
+# EverLink — Demo Video Script (≤ 5:00, two-demo focus)
 
-Read-aloud pre-script for the ≤5-minute demo video (spec §9 Phase H, §11 storyboard).
-If recording runs long, the fallback is: OBS screen-capture + read this script verbatim,
-keep it under 5:00 (spec §9).
+Read-aloud voiceover for the ≤5-minute demo video. Re-cut 2026-09-07 to put the weight on the
+**two demo paths**: Act 1/2 (positioning, principle, how-to) are compressed to ~1:15 so Act 3
+gets ~3:25 to walk **Path B** (first-party DB snapshot → full loop) and **Path A** (generic
+read-only crawl) each through **how you operate it → how it processes → what it shows**.
+The machine-readable read-aloud text (marks stripped) lives in `docs/video/vo_full.txt`.
 
-**Three-act structure (re-cut 2026-09-05, fourth rehearsal):** Act 1 intro 0:00–1:07
-(positioning / scale / real sites / three questions / principle / resources), Act 2 how to
-use it 1:07–1:27 (`/how-it-works`), Act 3 the demo 1:27–5:00. Judges need the "what / who /
-why / where" anchor inside the first 30 seconds; a cold open on a terminal loses them.
+**Three-act structure:** Act 1 intro 0:00–0:55 · Act 2 how-to + the two paths 0:55–1:15 ·
+Act 3 the two demos 1:15–4:40 (Demo 1 Path B 1:15–3:35, Demo 2 Path A 3:35–4:40) ·
+Close 4:40–5:00.
 
-> **Recording is an owner action.** This file is the prepared script + shot list only.
-> Before recording, re-confirm every cited number against the live/seeded environment
-> (the real nightly scan count will differ from the seeded replay). Mask/blur any
-> sensitive value on screen — DB hosts, URLs with tokens, `.env` (SUBMISSION_CHECKLIST §8).
+> **Recording is an owner action.** Re-confirm every cited number against the live/seeded
+> environment before recording; mask DB hosts / tokens / `.env` on screen.
 
-**Honesty labels used below** (keep them visible on screen or in voiceover):
-- **[REAL]** — deterministic detection code or a live Amazon Bedrock model call, no fakery.
-- **[SEEDED REPLAY]** — the injected demo dataset (`scripts/seed_demo.py`, 41 problem
-  slots + approve/reject samples + audit trail). Pre-computed, and labelled as replay
-  on screen per spec §4.1 / §7.
+**Honesty labels** (keep visible on screen or in voiceover):
+- **[REAL]** — deterministic detection code or a live Amazon Bedrock model call.
+- **[SEEDED REPLAY]** — the injected demo dataset (`scripts/seed_demo.py`), labelled on screen.
 - **[EST.]** — an estimate, not a measured figure.
 
-Cast: one operator (the author). Environment: terminal + Decision Board (Next.js) +
-email/Telegram. Judge backend for the live shots: `--judge mantle` — a **real LLM on Amazon
-Bedrock** (qwen through AWS's Bedrock Mantle gateway), rehearsed locally twice on
-2026-09-05 at 39s and 56s for `--limit 6`; the seeded card shots are replay.
+**The two paths (official framing, manual §"Two ways to feed it"):**
+- **Path A · generic read-only crawl** — `scan --site <any sitemap/page URL>`; public pages over
+  read-only HTTP; ANY website, no code change, L1/L2 needs zero AWS credentials, **never writes
+  back**; honours robots.txt, ≤1 request per link. Result = a terminal report.
+- **Path B · first-party DB snapshot** — read-only connect to your own source DB
+  (`export_slots.py` → CSV) for block-level slots, LLM Judge proposals, gated write-back, and
+  the human approval board.
 
 ---
 
-# Act 1 — Intro (0:00–1:07)
+# Act 1 — Intro (0:00–0:55)
 
-## Shot 1 — 0:00–0:10 · Positioning card · **Presentation**
-
-**On screen:** title card `#positioning` — "The autonomous link-rot steward." plus
-open-source / self-hosted / you-approve-one-line.
-
+## Shot 1 — 0:00–0:08 · Positioning card
+**On screen:** title card `#positioning` — "The autonomous link-rot steward." + open-source /
+self-hosted / you-approve line.
 **Voiceover:**
-> "EverLink is an **open-source, self-hosted link-rot steward**. Checkers only *report* —
-> EverLink **decides**, and you approve."
+> "EverLink is an open-source, self-hosted link-rot steward. Checkers only *report* — EverLink
+> **decides**, and you approve."
+
+## Shot 2 — 0:08–0:16 · Scale card
+**On screen:** title card `#stats` — 23,476 outbound slots across 3 sites; last manual check: never.
+**Voiceover:**
+> "These are my three content sites: twenty-three thousand outbound link slots. The last time
+> every one was checked by hand? Never."
+
+## Shot 3 — 0:16–0:24 · The real sites
+**On screen:** www.aethelgem.com → hotdeals.today, ~4s each.
+**Voiceover:**
+> "They rot a little every day, and nobody sees it until a reader does. So an agent patrols them."
+
+## Shot 4 — 0:24–0:34 · The three questions
+**On screen:** title cards WHO · WHY AN AGENT; a "Professional Agents track" badge.
+**Voiceover:**
+> "Who it's for: independent publishers and small content teams — we're entering the
+> Professional Agents track. Why an agent: decide-and-escalate is repetitive, judgment-heavy
+> work — exactly what an agent should take on."
+
+## Shot 5 — 0:34–0:47 · The principle
+**On screen:** title card `#principle` — PATROL / DECIDE / ACT & PROVE + honesty label line.
+**Voiceover:**
+> "The principle in three lines. Patrol: every outbound link, every night. Decide: a real LLM
+> Judge on Amazon Bedrock drafts the fix, constrained by four Steering policies. Act and prove:
+> apply, re-verify, roll back on failure — every step in a public audit trail."
+
+## Shot 6 — 0:47–0:55 · Where to find it
+**On screen:** title card `#resources` — repo + live URL in display type.
+**Voiceover:**
+> "Open source under MIT: github dot tomyuya slash everlink. And a live example: everlink-seven
+> dot vercel dot app."
 
 ---
 
-## Shot 2 — 0:10–0:20 · Scale card · **Impact**
+# Act 2 — How to use it + the two paths (0:55–1:15)
 
-**On screen:** title card `#stats` — 23,476 outbound link slots across 3 production sites;
-last full manual check: never.
-
+## Shot 7 — 0:55–1:15 · `/` primer, two stops
+**On screen:** the product page: top = positioning + three badges + two-database model; one
+End-keypress to the bottom = pipeline diagram + automation panel + the two feed paths.
 **Voiceover:**
-> "These are my three content sites: **23,476 outbound link slots** between them. The last
-> time every one was checked by hand? **Never.**"
+> "How you use it: clone it, deploy it on your own infrastructure. Links get in two ways. Path A:
+> a generic read-only crawl of any website — no database, no credentials, never writes back.
+> Path B: a read-only snapshot of your own database, unlocking block-level fixes and gated
+> write-back. Your source database stays strictly read-only either way."
 
 ---
 
-## Shot 3 — 0:20–0:30 · The real sites · **Impact**
+# Act 3 — The two demos (1:15–4:40)
 
-**On screen:** www.aethelgem.com → hotdeals.today, five seconds each (third site
-flashdeals.today is named but not navigated, to keep the pace).
+## Demo 1 — Path B, the full loop on my own site (1:15–3:35)
 
+### Shot 8 — 1:15–2:05 · Operate + process · **Technological Implementation**
+**On screen:** terminal. Press enter at **1:15** on
+`python -m everlink scan --site aethelgem --judge mantle --dry-run --limit 6` (measured 39s/56s,
+report lands 1:54–2:11; **2:05 is the cut decision point**). Real qwen proposals scroll; the
+`--dry-run` honesty line stays in frame.
 **Voiceover:**
-> "They rot a little every day — and nobody sees it until a reader does. So tonight, an
-> agent patrols them."
+> "Demo one: Path B, the full loop on my own site — the nightly cron's loop, run by hand,
+> dry-run, so nothing is written. **[operate]** I type:
+> everlink scan, site aethelgem, judge mantle, dry-run, limit six. **[process]** A Scanner agent
+> pulls each link slot from my database snapshot and probes it — L1 HTTP status and
+> redirect-chain analysis first, then an L2 stealthy page parse only where L1 is inconclusive. A
+> Judge agent — a real LLM on Amazon Bedrock — reads that evidence and drafts a structured
+> Proposal: replace this URL, rewrite that anchor, or escalate. Anything blocked or timed out is
+> flagged needs-human-recheck: the agent knows its limits and never fabricates. **[REAL]**"
+
+### Shot 9 — 2:05–2:20 · Show: report + morning brief · **Design**
+**On screen:** the scan report frozen (evidence + proposals); then, only if landed,
+`python -m everlink notify --brief --dry-run` (2–8s) — the brief and its "nothing sent" line.
+**Voiceover:**
+> "**[show]** The scan report lands: real proposals scrolling, each with its evidence chain.
+> Then the morning brief: sixteen problem slots, pushed to me as a notification, not an app."
+
+### Shot 10 — 2:20–2:45 · Show: the approval inbox · **Design**
+**On screen:** Board `/inbox` — 16 pending cards, live checkboxes, batch approve/reject bar;
+`?status=applied` (37) → `?status=rejected` (69) → rejection card `dec-7158d74e33` with typed why.
+**Voiceover:**
+> "The only screen I open: the decision inbox. Sixteen cards wait, each with its evidence
+> and its proposed fix. I approve the safe ones in a batch; I read the risky ones individually.
+> Rejections carry a typed *why* — and the agent remembers it, so it won't re-propose the same
+> fix next week. **[SEEDED REPLAY]**"
+
+### Shot 11 — 2:45–3:10 · Show: the two guards + closed loop · **Creativity / Design**
+**On screen:** `/audit?event=steering_cancel` (3 rows) + `dec-2b91672858`; then `dec-b21f3d82bc`
+(Evidence = post-apply URL, `Healthy HTTP 200`); `/audit?event=write` + `?event=verify` (38 each);
+`/report` (healed 37); `?event=rollback` + `?event=dead_letter` (1 each).
+**Voiceover:**
+> "Two guards matter most. This disclosure block is dead — but deleting it is a legal disaster,
+> so a Steering policy cancels the drop and the audit logs steering-cancel. And
+> when I approve a fix, the Writer snapshots the block, applies in one transaction, then re-probes
+> the new link to prove it's alive. **[REAL]** If verification fails, it rolls back and
+> dead-letters the decision. Last night: thirty-seven links healed, verified back to zero.
+> **[SEEDED REPLAY]**"
+
+### Shot 12 — 3:10–3:35 · Show: I test it, not trust it · **Technological Implementation**
+**On screen:** terminal. Press enter at **3:10** on `python scripts/run_evals.py --full --trace
+console` (19–22s; summary ~3:30): detection 50/50=100%, steering 0, three hard metrics 100%.
+**Voiceover:**
+> "And I don't ask you to trust the agent — I test it. A fifty-case eval suite runs offline
+> against known ground truth: detection one hundred percent, steering violations zero, three hard
+> metrics at one hundred percent. And the oracle is proven non-vacuous. **[REAL]**"
+
+## Demo 2 — Path A, the generic read-only crawl (3:35–4:40)
+
+### Shot 13 — 3:35–3:45 · Operate · **Design**
+**On screen:** terminal. Press enter at **3:35** on
+`python -m everlink scan --site https://blog.python.org --include-internal --dry-run --limit 8`
+(measured 10s/58s; **4:15 is the cut decision point**).
+**Voiceover:**
+> "Demo two: Path A, the generic read-only crawl. No database, no code change, no credentials.
+> **[operate]** I point it at a site EverLink has never seen: everlink scan, site blog dot python
+> dot org, include-internal, dry-run, limit eight."
+
+### Shot 14 — 3:45–4:15 · Process · **Technological Implementation**
+**On screen:** the crawl scrolling: robots.txt → sitemap (index banner if applicable) → page
+fetches → outbound-slot table → per-link probes.
+**Voiceover:**
+> "**[process]** Watch it work. It honours robots.txt, fetches the sitemap — and if that's an
+> index, it says so and expands one — crawls a few pages, extracts every
+> outbound link, skips social-share and same-site links as noise, then probes each survivor over
+> read-only HTTP: at most one request per link, politely rate-limited. No LLM, no credentials,
+> and it never writes back — not here, not anywhere."
+
+### Shot 15 — 4:15–4:40 · Show: the report + A vs B · **Impact / Design**
+**On screen:** the frozen terminal report: per-slot HTTP verdicts, a healthy count (8/8), and the
+honesty line `--dry-run: nothing written to any database`.
+**Voiceover:**
+> "**[show]** The payoff: a plain link-rot report in the terminal — every outbound
+> slot with its HTTP verdict, a healthy count, and the honesty line: read-only, nothing written.
+> That is the whole point of Path A: any website, a real report in under a minute, zero setup.
+> Path B goes deeper — block-level fixes and write-back on your own site. Path A is the door;
+> Path B is the house."
 
 ---
 
-## Shot 4 — 0:30–0:42 · The three questions · **Presentation**
+# Close (4:40–5:00)
 
-**On screen:** title cards PROBLEM · WHO · WHY AN AGENT, four seconds each.
-
+## Shot 16 — 4:40–5:00 · Close card
+**On screen:** final title card `#end`: "You approve decisions, not links."
 **Voiceover:**
-> "The problem: links rot, and checkers only report. Who it's for: independent publishers
-> and small content teams. Why an agent: decide-and-escalate is repetitive,
-> judgment-heavy work — exactly what an agent should take on."
-
----
-
-## Shot 5 — 0:42–0:57 · The principle · **Technological Implementation**
-
-**On screen:** title card `#principle` — three cards on one screen: 1 · PATROL,
-2 · DECIDE, 3 · ACT & PROVE, closing with the honesty label line
-`[REAL] · [SEEDED REPLAY] · [EST.]`.
-
-**Voiceover:**
-> "The principle in three lines. **Patrol:** every outbound link, every night. **Decide:**
-> a real LLM Judge on Amazon Bedrock drafts the fix, and four Steering policies constrain
-> it. **Act and prove:** apply, re-verify, roll back on failure — every step lands in a
-> public audit trail."
-
----
-
-## Shot 6 — 0:57–1:07 · Where to find it · **Presentation**
-
-**On screen:** title card `#resources` — `github.com/tomyuya/everlink` (MIT, self-host
-runbook) and `everlink-seven.vercel.app` (live example), both in display type.
-
-**Voiceover:**
-> "Open source under MIT: **github.com/tomyuya/everlink**. And a live example:
-> **everlink-seven.vercel.app**."
-
----
-
-# Act 2 — How to use it (1:07–1:27)
-
-## Shot 7 — 1:07–1:27 · `/how-it-works`, two stops · **Design**
-
-**On screen:** the public primer page. Stop 1 at the top: the positioning paragraph with
-its three badges (Open source · MIT / Self-hosted / Not a SaaS) and the two-database
-model (your database strictly read-only; EverLink writes only to its own). Stop 2: one
-End-keypress to the bottom (page is ~2.1 viewports tall) — the deployer contract's five
-items, the **Scanner → Judge → Writer pipeline diagram**, the automation panel, and the
-honest note that the three sites shown are the maintainer's own dogfooding deployment.
-
-**Voiceover:**
-> "How you use it: clone it, point it at your databases, deploy it on your own
-> infrastructure. Your site's database stays **strictly read-only**; EverLink writes only
-> to its own. The pipeline is Scanner, Judge, Writer — a nightly cron at one end, and a
-> human at the other."
-
----
-
-# Act 3 — The demo (1:27–5:00)
-
-## Shot 8 — 1:27–2:23 · The nightly run · **Technological Implementation**
-
-**On screen:** terminal. `python -m everlink scan --site aethelgem --judge mantle --dry-run
---limit 6` (press enter at **1:27** — measured 39s and 56s on two runs, so the report lands
-between 2:06 and 2:23; **2:12 is the cut decision point**), then, only if the report has
-landed, `python -m everlink notify --brief --dry-run` (2–8s, the morning brief with 16
-cards and its "nothing sent" honesty line). Cut to the Board's `/inbox` showing the
-problem queue. Both `--dry-run` honesty lines stay in frame.
-
-**Voiceover:**
-> "Every night a cron kicks off the loop. A **Scanner** agent extracts each link slot and
-> probes it — L1 HTTP status and redirect-chain analysis, then an L2 stealthy page parse
-> only where L1 is inconclusive. A **Judge** agent — a real LLM on Amazon Bedrock — decides
-> the fix and emits a structured `Proposal`. **[REAL]** The detection is deterministic code; the
-> judgment is a live model call. Anything blocked or timed out is flagged
-> `needs_human_recheck` — the agent knows its limits and never fabricates a result. By
-> morning, **16 problem slots** are waiting **[live nightly proposals + seeded replay
-> cards, each labelled]**, pushed to me as a morning brief. It surfaces as a
-> notification, not an app."
-
----
-
-## Shot 9 — 2:23–2:43 · The decision inbox · **Design**
-
-**On screen:** the Decision Board `/inbox` — pending cards with live checkboxes and the
-batch approve/reject bar (the public deployment is fully interactive).
-
-**Voiceover:**
-> "The only screen I open is a minimal approval inbox. Sixteen problem slots wait here —
-> each with its evidence and its proposed fix."
-
----
-
-## Shot 10 — 2:43–3:05 · Batched, rejected, remembered · **Design**
-
-**On screen:** `/inbox?status=applied` (**37** applied and verified) →
-`/inbox?status=rejected` (**69**, every one carrying a reason) → the rejection card
-`dec-7158d74e33` with its typed why (price moved $199→$349, the "under $200" claim went
-stale).
-
-**Voiceover:**
-> "Low-risk fixes are batched — **37** applied and verified so far. **[SEEDED REPLAY]** The
-> risky ones I read individually: rejections like this carry a typed *why*, and the agent
-> remembers that reason — it won't re-propose the same fix next week."
-
----
-
-## Shot 11 — 3:05–3:27 · Safety curtain 1: the disclosure guard · **Creativity & Originality**
-
-**On screen:** `/audit?event=steering_cancel` (filter chip, 3 rows) and the disclosure
-slot's decision card `dec-2b91672858` carrying the human's typed acknowledgement: no write
-may touch the protected block.
-
-**Voiceover:**
-> "Here's the guardrail I care about most. This block is a dead link — but it also carries
-> my **affiliate disclosure**. Deleting it would be a legal and trust disaster. A
-> `DisclosurePolicy` steering hook marks the slot `protected` and **cancels** the drop
-> before it happens; the audit log records `steering_cancel`, and a human confirmed on the
-> record: no write may touch it."
-
----
-
-## Shot 12 — 3:27–3:57 · Safety curtain 2 + the closed loop · **Design / Impact**
-
-**On screen:** (a) the approved card `dec-b21f3d82bc` (Applied · High · Replace URL; the
-Evidence block renders the **post-apply new URL** with `Healthy HTTP 200`). (b) The audit
-filters `/audit?event=write` and `/audit?event=verify` (38 rows each: snapshot → apply in
-a single transaction → re-probe). (c) `/report`: **Links healed 37 / Slots fixed 37**.
-(d) The one forced-fail on record: `/audit?event=rollback` + `/audit?event=dead_letter`
-(1 row each).
-
-**Voiceover:**
-> "When I approve, the Writer **snapshots the block first**, applies the fix in a single
-> transaction, then — this is the part that matters — `verify_fix` **re-probes the new
-> link** to confirm it's genuinely alive. **[REAL]** Last night: **37 dead links verified
-> back to zero.** **[SEEDED REPLAY]** And if verification ever fails, it rolls back to the
-> snapshot and dead-letters the decision with a recommendation card. It closes the loop;
-> it doesn't just claim success."
-
----
-
-## Shot 13 — 3:57–4:22 · Evals: 50 cases, three hard metrics · **Technological Implementation**
-
-**On screen:** terminal. `python scripts/run_evals.py --full --trace console` (press enter
-at **3:57**; measured 19–22s, summary lands 4:16–4:19). The report prints: detection
-50/50 = 100%, steering violations 0, and the three hard metrics at 100% (disclosure
-zero-deletion, reference zero-`REPLACE_URL`, duplicate merged → 41 cards), plus the
-honesty note naming `--judge mantle` as the route that scores the real Judge.
-
-**Voiceover:**
-> "I don't ask you to trust the agent — I test it. A 50-case evaluation suite runs against
-> a fixture server with known ground truth, fully offline. Detection accuracy **100%**,
-> steering violations **zero**, and three hard metrics at **100%**: a disclosure is never
-> deleted, a reference link is never blindly replaced, and duplicates always merge to one
-> card. The oracle is proven non-vacuous by a test that injects a rule-breaking Judge and
-> asserts the evaluators catch it. **[REAL — stub backend: detection is real deterministic
-> code; the live Judge (qwen on Amazon Bedrock via the Mantle gateway) is scored with the
-> same harness via `--judge mantle`.]**"
-
----
-
-## Shot 14 — 4:22–4:42 · The generic adapter · **Impact / Design**
-
-**On screen:** point EverLink's `generic` read-only adapter at an arbitrary well-known blog
-— rehearsed command: `python -m everlink scan --site https://blog.python.org
---include-internal --dry-run --limit 8` (press enter at **4:22**; measured 10s and 58s on two
-runs — external network, so **4:38 is the cut decision point**: if the report has landed,
-hold on 8/8 healthy, otherwise cut to the closing card while the real crawl keeps
-scrolling).
-
-**Voiceover:**
-> "This isn't hard-coded to my sites. A `generic` adapter will scan **any** blog —
-> read-only — and hand back a link-rot report. Here it is on a site EverLink has never
-> seen. Read-only, everywhere."
-
----
-
-## Shot 15 — 4:42–5:00 · Close · **Presentation**
-
-**On screen:** final title card `#end`:
-
-```
-You approve decisions, not links.
-```
-
-**Voiceover:**
-> "EverLink patrols 23,476 links so I don't have to. It's honest about what it can't do,
-> it never touches my disclosures, it verifies its own fixes, and it rolls back when it's
-> wrong. By my estimate it removes about **6.2 hours a week [EST.]** of link maintenance —
-> and it only ever interrupts me when a human judgment actually matters. Built with the
-> **Strands Agents SDK** and **Amazon Bedrock** for **Agents for Humans**. You approve
+> "EverLink patrols twenty-three thousand links so I don't have to. It's honest about its limits,
+> never touches my disclosures, verifies its own fixes, and hands me back about six hours a
+> week. Built with the Strands Agents SDK and Amazon Bedrock for Agents for Humans. You approve
 > decisions, not links."
 
 ---
 
-## Timing & coverage check (spec §12-6)
+## Timing & coverage check
 
 | Requirement | Where | ✓ |
 |---|---|---|
-| Total ≤ 5:00 | 15 shots in three acts, last ends 5:00 | stopwatch at record time |
-| Positioning stated | Shot 1 (card) + Shot 7 (page) | ✓ |
-| Problem stated | Shots 2–4 | ✓ |
-| Who it's for stated | Shot 4 | ✓ |
-| Why (an agent) stated | Shot 4 | ✓ |
-| Principle stated | Shot 5 (card) + Shot 7 (pipeline diagram) | ✓ |
-| Resources stated | Shot 6 (card: repo + live URL) | ✓ |
-| How to use stated | Shot 7 (deployer contract, read-only source DB) | ✓ |
-| Real data primary, replay labelled | Shots 8/10/12 carry **[SEEDED REPLAY]**; detection/verify/evals **[REAL]** | ✓ |
-| Strands features visible | multi-agent (3), steering (5,11,12), interrupt (10), hooks/audit (11), structured output (10), evals (13), Bedrock (5,8,15), OTel (13) | ✓ |
-| Sensitive values masked | DB hosts / tokens / `.env` blurred | owner at record time |
+| Total ≤ 5:00 | 16 shots, last ends 5:00; vo_full 实测 **4:57.1**（edge-tts AndrewNeural） | stopwatch at record time |
+| Positioning / problem / who / why | Shots 1–4 | ✓ |
+| Principle | Shot 5 + Shot 7 pipeline | ✓ |
+| Resources | Shot 6 | ✓ |
+| How-to + two paths framed | Shot 7 | ✓ |
+| **Demo 1 Path B: operate / process / show** | Shot 8 (operate+process), 9–12 (show) | ✓ |
+| **Demo 2 Path A: operate / process / show** | Shot 13 (operate), 14 (process), 15 (show) | ✓ |
+| Real primary, replay labelled | Shots 8/10/11/12 carry [REAL]/[SEEDED REPLAY] | ✓ |
+| Strands features visible | multi-agent (8), steering (11), hooks/audit (11), structured output (8), evals (12), Bedrock (5/8/16), OTel (12) | ✓ |
+| Sensitive values masked | owner at record time | ✓ |

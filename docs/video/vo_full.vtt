@@ -1,0 +1,212 @@
+1
+00:00:00,050 --> 00:00:04,037
+EverLink is an open-source, self-hosted link-rot steward.
+
+2
+00:00:04,037 --> 00:00:08,062
+Checkers only report — EverLink decides, and you approve.
+
+3
+00:00:08,062 --> 00:00:12,762
+These are my three content sites: twenty-three thousand outbound link slots.
+
+4
+00:00:12,762 --> 00:00:15,375
+The last time every one was checked by hand?
+
+5
+00:00:15,375 --> 00:00:16,125
+Never.
+
+6
+00:00:16,125 --> 00:00:20,450
+They rot a little every day, and nobody sees it until a reader does.
+
+7
+00:00:20,450 --> 00:00:22,000
+So an agent patrols them.
+
+8
+00:00:22,000 --> 00:00:28,550
+Who it's for: independent publishers and small content teams — we're entering the Professional Agents track.
+
+9
+00:00:28,550 --> 00:00:35,600
+Why an agent: decide-and-escalate is repetitive, judgment-heavy work — exactly what an agent should take on.
+
+10
+00:00:35,600 --> 00:00:37,737
+The principle in three lines.
+
+11
+00:00:37,737 --> 00:00:40,800
+Patrol: every outbound link, every night.
+
+12
+00:00:40,800 --> 00:00:48,262
+Decide: a real LLM Judge on Amazon Bedrock drafts the fix, constrained by four Steering policies.
+
+13
+00:00:48,262 --> 00:00:55,175
+Act and prove: apply, re-verify, roll back on failure — every step in a public audit trail.
+
+14
+00:00:55,175 --> 00:00:59,962
+Open source under MIT: github dot tomyuya slash everlink.
+
+15
+00:00:59,962 --> 00:01:03,712
+And a live example: everlink-seven dot vercel dot app.
+
+16
+00:01:03,712 --> 00:01:07,650
+How you use it: clone it, deploy it on your own infrastructure.
+
+17
+00:01:07,650 --> 00:01:09,100
+Links get in two ways.
+
+18
+00:01:09,100 --> 00:01:16,600
+Path A: a generic read-only crawl of any website — no database, no credentials, never writes back.
+
+19
+00:01:16,600 --> 00:01:23,750
+Path B: a read-only snapshot of your own database, unlocking block-level fixes and gated write-back.
+
+20
+00:01:23,750 --> 00:01:27,550
+Your source database stays strictly read-only either way.
+
+21
+00:01:27,550 --> 00:01:36,337
+Demo one: Path B, the full loop on my own site — the nightly cron's loop, run by hand, dry-run, so nothing is written.
+
+22
+00:01:36,337 --> 00:01:42,437
+I type: everlink scan, site aethelgem, judge mantle, dry-run, limit six.
+
+23
+00:01:42,437 --> 00:01:56,287
+A Scanner agent pulls each link slot from my database snapshot and probes it — L1 HTTP status and redirect-chain analysis first, then an L2 stealthy page parse only where L1 is inconclusive.
+
+24
+00:01:56,287 --> 00:02:07,712
+A Judge agent — a real LLM on Amazon Bedrock — reads that evidence and drafts a structured Proposal: replace this URL, rewrite that anchor, or escalate.
+
+25
+00:02:07,712 --> 00:02:14,675
+Anything blocked or timed out is flagged needs-human-recheck: the agent knows its limits and never fabricates.
+
+26
+00:02:14,675 --> 00:02:19,925
+The scan report lands: real proposals scrolling, each with its evidence chain.
+
+27
+00:02:19,925 --> 00:02:25,975
+Then the morning brief: sixteen problem slots, pushed to me as a notification, not an app.
+
+28
+00:02:25,975 --> 00:02:29,087
+The only screen I open: the decision inbox.
+
+29
+00:02:29,087 --> 00:02:33,687
+Sixteen cards wait, each with its evidence and its proposed fix.
+
+30
+00:02:33,687 --> 00:02:38,412
+I approve the safe ones in a batch; I read the risky ones individually.
+
+31
+00:02:38,412 --> 00:02:45,175
+Rejections carry a typed why — and the agent remembers it, so it won't re-propose the same fix next week.
+
+32
+00:02:45,175 --> 00:02:46,762
+Two guards matter most.
+
+33
+00:02:46,762 --> 00:02:55,675
+This disclosure block is dead — but deleting it is a legal disaster, so a Steering policy cancels the drop and the audit logs steering-cancel.
+
+34
+00:02:55,675 --> 00:03:04,112
+And when I approve a fix, the Writer snapshots the block, applies in one transaction, then re-probes the new link to prove it's alive.
+
+35
+00:03:04,112 --> 00:03:08,350
+If verification fails, it rolls back and dead-letters the decision.
+
+36
+00:03:08,350 --> 00:03:12,587
+Last night: thirty-seven links healed, verified back to zero.
+
+37
+00:03:12,587 --> 00:03:15,512
+And I don't ask you to trust the agent — I test it.
+
+38
+00:03:15,512 --> 00:03:26,200
+A fifty-case eval suite runs offline against known ground truth: detection one hundred percent, steering violations zero, three hard metrics at one hundred percent.
+
+39
+00:03:26,200 --> 00:03:28,775
+And the oracle is proven non-vacuous.
+
+40
+00:03:28,775 --> 00:03:32,575
+Demo two: Path A, the generic read-only crawl.
+
+41
+00:03:32,575 --> 00:03:36,075
+No database, no code change, no credentials.
+
+42
+00:03:36,075 --> 00:03:45,312
+I point it at a site EverLink has never seen: everlink scan, site blog dot python dot org, include-internal, dry-run, limit eight.
+
+43
+00:03:45,312 --> 00:03:46,300
+Watch it work.
+
+44
+00:03:46,300 --> 00:04:06,912
+It honours robots.txt, fetches the sitemap — and if that's an index, it says so and expands one — crawls a few pages, extracts every outbound link, skips social-share and same-site links as noise, then probes each survivor over read-only HTTP: at most one request per link, politely rate-limited.
+
+45
+00:04:06,912 --> 00:04:12,550
+No LLM, no credentials, and it never writes back — not here, not anywhere.
+
+46
+00:04:12,650 --> 00:04:23,550
+The payoff: a plain link-rot report in the terminal — every outbound slot with its HTTP verdict, a healthy count, and the honesty line: read-only, nothing written.
+
+47
+00:04:23,550 --> 00:04:29,987
+That is the whole point of Path A: any website, a real report in under a minute, zero setup.
+
+48
+00:04:29,987 --> 00:04:34,537
+Path B goes deeper — block-level fixes and write-back on your own site.
+
+49
+00:04:34,537 --> 00:04:37,800
+Path A is the door; Path B is the house.
+
+50
+00:04:37,800 --> 00:04:41,500
+EverLink patrols twenty-three thousand links so I don't have to.
+
+51
+00:04:41,500 --> 00:04:49,337
+It's honest about its limits, never touches my disclosures, verifies its own fixes, and hands me back about six hours a week.
+
+52
+00:04:49,337 --> 00:04:54,637
+Built with the Strands Agents SDK and Amazon Bedrock for Agents for Humans.
+
+53
+00:04:54,637 --> 00:04:57,125
+You approve decisions, not links.
+
