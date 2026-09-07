@@ -48,6 +48,18 @@ COMMERCIAL_DOMAINS = (
     "skimlinks", "tgtag.io", "tkqlhce", "dpbolvw", "kqzyfj", "jdoqocy",
 )
 _LOC_RE = re.compile(r"<loc>\s*(.*?)\s*</loc>", re.I | re.S)
+# Host+path prefixes of social "share this" widgets. These are auto-generated UI
+# buttons, NOT author-chosen content links: they never rot, and they always
+# bot-wall automated probes, so scanning them only floods the report with
+# needs_human_recheck noise. Skipped by default; include_share=True re-enables.
+SHARE_ENDPOINTS = (
+    ("twitter.com", "/intent/"), ("x.com", "/intent/"),
+    ("facebook.com", "/sharer"), ("facebook.com", "/share"),
+    ("pinterest.com", "/pin/create"), ("wa.me", ""), ("api.whatsapp.com", "/send"),
+    ("reddit.com", "/submit"), ("linkedin.com", "/sharing"),
+    ("linkedin.com", "/sharearticle"), ("t.me", "/share"),
+    ("news.ycombinator.com", "/submit"),
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -148,6 +160,17 @@ def classify_slot_type(url: str, base_host: str) -> SlotType:
     return "reference"
 
 
+def is_share_endpoint(url: str) -> bool:
+    """PURE: True for social share/intent widgets (not link-rot candidates)."""
+    p = urlparse(url)
+    host = (p.hostname or "").lower()
+    path = (p.path or "").lower()
+    for dom, prefix in SHARE_ENDPOINTS:
+        if (host == dom or host.endswith("." + dom)) and path.startswith(prefix):
+            return True
+    return False
+
+
 # --------------------------------------------------------------------------- #
 # thin network layer
 # --------------------------------------------------------------------------- #
@@ -235,7 +258,8 @@ def _make_slot(*, site: str, page_url: str, page_title: Optional[str],
 def slots_from_page(url: str, *, site: Optional[str] = None,
                     client: Optional[httpx.Client] = None, timeout: float = 20.0,
                     include_internal: bool = False, max_slots: int = 200,
-                    respect_robots: bool = True,
+                    respect_robots: bool = True, include_share: bool = False,
+                    diag: Optional[dict] = None,
                     robots_cache: Optional[dict] = None) -> list[LinkSlot]:
     """Crawl ONE page read-only and return its outbound LinkSlot[] (deduped)."""
     own = client is None
@@ -251,11 +275,20 @@ def slots_from_page(url: str, *, site: Optional[str] = None,
         base_host = (urlparse(url).hostname or "").lower()
         site = site or base_host or "generic"
         title, links = extract_links(html_text, url)
+        if diag is not None:
+            diag["pages_crawled"] = diag.get("pages_crawled", 0) + 1
+            diag["links_seen"] = diag.get("links_seen", 0) + len(links)
         slots: list[LinkSlot] = []
         seen: set[str] = set()
         for absu, anchor in links:
+            if not include_share and is_share_endpoint(absu):
+                if diag is not None:
+                    diag["share_skipped"] = diag.get("share_skipped", 0) + 1
+                continue
             st = classify_slot_type(absu, base_host)
             if st == "internal" and not include_internal:
+                if diag is not None:
+                    diag["internal_skipped"] = diag.get("internal_skipped", 0) + 1
                 continue
             if absu in seen:
                 continue
@@ -274,6 +307,7 @@ def slots_from_sitemap(sitemap_url: str, *, site: Optional[str] = None,
                        max_pages: int = 25, max_slots: int = 500,
                        rate_delay: float = 1.0, timeout: float = 20.0,
                        include_internal: bool = False, respect_robots: bool = True,
+                       include_share: bool = False, diag: Optional[dict] = None,
                        headers: Optional[dict] = None) -> list[LinkSlot]:
     """Expand a sitemap (or one level of sitemap-index) then crawl its pages."""
     cli = _client(timeout, headers)
@@ -286,6 +320,10 @@ def slots_from_sitemap(sitemap_url: str, *, site: Optional[str] = None,
             return []
         locs = parse_sitemap(xml_text)
         page_urls: list[str] = []
+        if diag is not None:
+            diag["is_index"] = is_sitemap_index(xml_text)
+            diag["sub_sitemaps"] = len(locs) if diag["is_index"] else 0
+            diag["expanded_subs"] = []
         if is_sitemap_index(xml_text):
             for sub in locs:
                 if sub.lower().endswith(".gz"):     # v1: skip gzipped sub-sitemaps
@@ -293,6 +331,8 @@ def slots_from_sitemap(sitemap_url: str, *, site: Optional[str] = None,
                 _s2, x2, e2 = _get(sub, cli)
                 if not e2 and x2:
                     page_urls.extend(parse_sitemap(x2))
+                    if diag is not None:
+                        diag["expanded_subs"].append(sub)
                 if rate_delay:
                     time.sleep(rate_delay)
                 if len(page_urls) >= max_pages:
@@ -305,7 +345,8 @@ def slots_from_sitemap(sitemap_url: str, *, site: Optional[str] = None,
             slots.extend(slots_from_page(
                 pu, site=site, client=cli, timeout=timeout,
                 include_internal=include_internal, max_slots=max_slots,
-                respect_robots=respect_robots, robots_cache=cache))
+                respect_robots=respect_robots, include_share=include_share,
+                diag=diag, robots_cache=cache))
             if len(slots) >= max_slots:
                 break
             if rate_delay:
@@ -319,6 +360,7 @@ def slots_from_urls(urls: Iterable[str], *, site: Optional[str] = None,
                     max_pages: int = 25, max_slots: int = 500,
                     rate_delay: float = 1.0, timeout: float = 20.0,
                     include_internal: bool = False, respect_robots: bool = True,
+                    include_share: bool = False, diag: Optional[dict] = None,
                     headers: Optional[dict] = None) -> list[LinkSlot]:
     """Treat each URL as a page and crawl it read-only."""
     urls = list(urls)[:max_pages]
@@ -334,7 +376,8 @@ def slots_from_urls(urls: Iterable[str], *, site: Optional[str] = None,
             slots.extend(slots_from_page(
                 u, site=site, client=cli, timeout=timeout,
                 include_internal=include_internal, max_slots=max_slots,
-                respect_robots=respect_robots, robots_cache=cache))
+                respect_robots=respect_robots, include_share=include_share,
+                diag=diag, robots_cache=cache))
             if len(slots) >= max_slots:
                 break
             if rate_delay:
@@ -347,7 +390,8 @@ def slots_from_urls(urls: Iterable[str], *, site: Optional[str] = None,
 def extract_slots_generic(source, *, site: Optional[str] = None, max_pages: int = 25,
                           max_slots: int = 500, rate_delay: float = 1.0,
                           timeout: float = 20.0, include_internal: bool = False,
-                          respect_robots: bool = True,
+                          respect_robots: bool = True, include_share: bool = False,
+                          diag: Optional[dict] = None,
                           headers: Optional[dict] = None) -> list[LinkSlot]:
     """Auto-detect the source kind and return read-only LinkSlot[].
 
@@ -358,14 +402,17 @@ def extract_slots_generic(source, *, site: Optional[str] = None, max_pages: int 
         return slots_from_urls(source, site=site, max_pages=max_pages,
                                max_slots=max_slots, rate_delay=rate_delay,
                                timeout=timeout, include_internal=include_internal,
-                               respect_robots=respect_robots, headers=headers)
+                               respect_robots=respect_robots,
+                               include_share=include_share, diag=diag, headers=headers)
     s = (source or "").strip()
     low = s.lower()
     if "sitemap" in low or low.endswith((".xml", ".xml.gz")):
         return slots_from_sitemap(s, site=site, max_pages=max_pages, max_slots=max_slots,
                                   rate_delay=rate_delay, timeout=timeout,
                                   include_internal=include_internal,
-                                  respect_robots=respect_robots, headers=headers)
+                                  respect_robots=respect_robots,
+                                  include_share=include_share, diag=diag, headers=headers)
     return slots_from_page(s, site=site, timeout=timeout, max_slots=max_slots,
                            include_internal=include_internal,
-                           respect_robots=respect_robots)
+                           respect_robots=respect_robots,
+                           include_share=include_share, diag=diag)

@@ -61,20 +61,59 @@ def main() -> int:
                     help="run L2 page-parse on ambiguous/soft-404 suspects")
     ap.add_argument("--ignore-robots", action="store_true",
                     help="ignore robots.txt (default: respect it, fail-open)")
+    ap.add_argument("--include-share", action="store_true",
+                    help="also report social share/intent widgets (skipped by default)")
     args = ap.parse_args()
 
     source = args.source[0] if len(args.source) == 1 else args.source
     print(f"[1/3] discovering outbound slots from: {source}")
+    diag: dict = {}
     slots = extract_slots_generic(
         source, site=args.site, max_pages=args.max_pages, max_slots=args.max_slots,
         rate_delay=args.rate_delay, timeout=args.timeout,
-        include_internal=args.include_internal, respect_robots=not args.ignore_robots)
+        include_internal=args.include_internal, include_share=args.include_share,
+        respect_robots=not args.ignore_robots, diag=diag)
+    # Say what the source actually WAS: a sitemap INDEX only expands until it has
+    # max_pages URLs, so a small --max-pages silently samples the FIRST sub-sitemap.
+    # Surface that instead of letting a new user guess why coverage looks thin.
+    if diag.get("is_index"):
+        expanded = ", ".join(
+            u.rsplit("/", 1)[-1] for u in (diag.get("expanded_subs") or [])) or "(none)"
+        print(f"  source is a sitemap INDEX ({diag.get('sub_sitemaps')} sub-sitemaps); "
+              f"expanded: {expanded}")
+        print(f"  NOTE: --max-pages {args.max_pages} samples only the first sub-sitemap"
+              f"(s) - point at a leaf sitemap or raise --max-pages for deeper coverage.")
     if not slots:
-        print("  no outbound slots discovered "
-              "(robots-blocked, empty page, or fetch failed).")
+        pages = diag.get("pages_crawled", 0)
+        internal = diag.get("internal_skipped", 0)
+        share = diag.get("share_skipped", 0)
+        if pages == 0:
+            print("  no outbound slots discovered "
+                  "(robots-blocked, empty page, or fetch failed).")
+        elif internal and not share:
+            print(f"  crawled {pages} page(s): every link was internal (same-host), "
+                  f"{internal} skipped. Use --include-internal to report them, or "
+                  f"point at a content sitemap.")
+        elif share and not internal:
+            print(f"  crawled {pages} page(s): all {share} outbound link(s) were social "
+                  f"share widgets (skipped). Use --include-share to see them.")
+        elif internal or share:
+            print(f"  crawled {pages} page(s): {internal} internal + {share} share "
+                  f"link(s) skipped, 0 content outbound left. Try "
+                  f"--include-internal / --include-share.")
+        else:
+            print("  crawled page(s) but found no links at all.")
         return 1
     by_type = Counter(s.slot_type for s in slots)
     print(f"  found {len(slots)} outbound slots on '{slots[0].site}': {dict(by_type)}")
+    skipped = []
+    if diag.get("internal_skipped"):
+        skipped.append(f"{diag['internal_skipped']} internal")
+    if diag.get("share_skipped"):
+        skipped.append(f"{diag['share_skipped']} share")
+    if skipped:
+        print(f"  (skipped {', '.join(skipped)} link(s) across "
+              f"{diag.get('pages_crawled', 0)} crawled page(s))")
 
     print(f"\n[2/3] probing (L1{'' if not args.l2 else ' + L2'}), <=1 request per link ...")
     rows: list[tuple] = []
