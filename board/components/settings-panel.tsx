@@ -7,9 +7,11 @@
  * server-rendered ledger + coverage re-read the DB.
  *
  * PRECONDITION GATE: the knobs stay disabled until the DB + control-plane
- * schema are reachable; "Run now" additionally needs a LIVE cron heartbeat
- * (a fire within the last 75 min) — without a ticking cron there is nothing
- * that could consume the request, and the UI says so instead of pretending.
+ * schema are reachable; "Run now" additionally needs a cron that fires OFTEN
+ * ENOUGH to pick the request up within the hour (runNowAvailable). A healthy
+ * daily cron is alive but cannot honour "now" — the request would sit until the
+ * next 03:00 fire — so the button stays locked and the tooltip says why; the UI
+ * never pretends a run will start.
  */
 import { Play, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -22,6 +24,9 @@ export interface SettingsPreconditions {
   db: boolean;
   schema: boolean;
   heartbeatAlive: boolean;
+  runNowAvailable: boolean;
+  /** Inferred cron period in minutes (null = cadence not yet learnable). */
+  periodMin: number | null;
   lastFireAt: string | null;
 }
 
@@ -34,6 +39,14 @@ function fmtUtc(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "—" : d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+}
+
+/** "≈hourly" / "≈daily" from the inferred period, for honest schedule wording. */
+function cadenceLabel(periodMin: number | null): string | null {
+  if (periodMin === null) return null;
+  if (periodMin <= 90) return "≈hourly";
+  if (periodMin <= 2880) return "≈daily";
+  return `≈every ${Math.round(periodMin / 1440)} days`;
 }
 
 export function SettingsPanel({
@@ -242,11 +255,15 @@ export function SettingsPanel({
               <button
                 type="button"
                 onClick={runNow}
-                disabled={!controlsOn || !pre.heartbeatAlive || !enabled || busy !== null}
+                disabled={!controlsOn || !pre.runNowAvailable || !enabled || busy !== null}
                 title={
-                  pre.heartbeatAlive
-                    ? "Ask the next cron fire to run the chain now"
-                    : "Needs a live cron heartbeat (a Railway-tagged fire within 75 min — a run started on a laptop does not count)"
+                  pre.runNowAvailable
+                    ? "Ask the next cron fire to run the chain now (picked up within the hour)"
+                    : !pre.heartbeatAlive
+                      ? "Needs a live cron heartbeat (a Railway-tagged fire within its expected window — a run started on a laptop does not count)"
+                      : pre.periodMin === null
+                        ? "Cron is wired and has fired once, but not often enough yet to confirm it can run 'now' within the hour. It clarifies after the next fire — or switch the Railway cron to 0 * * * * (hourly) to enable on-demand runs now."
+                        : "Your cron fires about once a day, so it cannot run 'now' — the request would wait until the next daily fire. Switch the Railway cron to 0 * * * * (hourly) to enable on-demand runs."
                 }
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ring-1 ring-inset ring-zinc-300 hover:bg-zinc-100 disabled:opacity-40 dark:ring-zinc-700 dark:hover:bg-zinc-800"
               >
@@ -262,7 +279,14 @@ export function SettingsPanel({
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
               last change: {fmtUtc(settings.updated_at)}
               {settings.updated_by ? ` by ${settings.updated_by}` : ""} · heartbeat:{" "}
-              {pre.heartbeatAlive ? `alive (${fmtUtc(pre.lastFireAt)})` : "NOT alive"}
+              {pre.heartbeatAlive ? (
+                <>
+                  alive{cadenceLabel(pre.periodMin) ? ` (${cadenceLabel(pre.periodMin)})` : ""} ·{" "}
+                  {fmtUtc(pre.lastFireAt)}
+                </>
+              ) : (
+                "NOT alive"
+              )}
             </p>
           </div>
         </section>

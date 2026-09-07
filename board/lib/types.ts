@@ -180,8 +180,20 @@ export interface CronOverview {
    * origin tagging existed — is excluded: it proves the chain works, not that the
    * Railway cron is wired. */
   last_fire_at: string | null;
-  /** `last_fire_at` falls inside HEARTBEAT_WINDOW_MIN. */
+  /** The cron's real firing period in minutes, inferred from the median gap
+   * between consecutive Railway fires (~60 for hourly, ~1440 for daily). `null`
+   * when fewer than two Railway fires are in the window, i.e. the cadence is not
+   * yet learnable — callers then fall back to the hourly floor. */
+  period_min: number | null;
+  /** `last_fire_at` falls inside the cadence-aware liveness window
+   * (max(HEARTBEAT_WINDOW_MIN, 1.5 × period_min)). A healthy DAILY cron is alive
+   * all day, not just for 75 min after its 03:00 fire. */
   heartbeat_alive: boolean;
+  /** Run-now can be honoured SOON: the cron fires often enough (≈hourly) that the
+   * next fire picks the request up within the hour. False for a confirmed daily
+   * cron (the request would sit until the next 03:00), true when cadence is still
+   * unknown so a freshly-wired hourly cron is not locked out. */
+  run_now_available: boolean;
   last_run: NightlyRunRow | null;
 }
 

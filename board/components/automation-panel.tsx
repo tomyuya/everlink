@@ -5,15 +5,13 @@ import { CopyButton } from "./copy-button";
 
 /** What the board's control plane can state as FACT on a public page.
  *
- * Deliberately absent: any "heartbeat alive" verdict. Liveness is a 75-minute
- * window over the ledger's newest Railway-tagged fire, which only means something
- * next to an HOURLY cron. This deployment's cron is daily (`0 3 * * *`, confirmed
- * with `railway status`), so that verdict would read "quiet" for 23 hours a day
- * while the chain is in fact running fine — and until the first tagged fire
- * exists it can only read red. The verdict belongs on /settings, where the
- * precondition checklist and the one-time wiring steps give it context.
- * Everything below is read straight from the `settings` row or quoted from a
- * ledger row (trigger and origin included), so it cannot overclaim.
+ * Deliberately absent: any "heartbeat alive" verdict — not because it is unsound
+ * (liveness is now cadence-aware: cronOverview infers the cron's real period from
+ * the ledger's Railway-fire gaps, so a healthy daily cron reads alive all day
+ * instead of "quiet" for 23h), but because the verdict only means something next
+ * to the precondition checklist and the one-time wiring steps, which live on
+ * /settings. Everything below is read straight from the `settings` row or quoted
+ * from a ledger row (trigger and origin included), so it cannot overclaim.
  */
 export interface ScheduleState {
   runHourUtc: number;
@@ -53,8 +51,9 @@ const FLAGS: { flag: string; desc: string }[] = [
  * HONESTY NOTE (deliberate): the board is a Next.js app on Vercel while the agent is a
  * Python service on Railway, so a button here cannot exec Python. What it CAN do is
  * stamp a run-now request into the `settings` row, which the next cron fire consumes —
- * a real trigger, mediated by the DB, and locked until a live heartbeat proves the cron
- * is wired (see /settings). Everything else on this panel is documentation + live state.
+ * a real trigger, mediated by the DB, and locked until the cron fires often enough
+ * to pick it up within the hour (see /settings). Everything else on this panel is
+ * documentation + live state.
  */
 export function AutomationPanel({
   lastActivity,

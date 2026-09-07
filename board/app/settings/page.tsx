@@ -34,7 +34,15 @@ function isSchemaMissing(message: string): boolean {
 function heartbeatDetail(overview: CronOverview | null): string {
   if (!overview) return "the ledger could not be read";
   if (overview.last_fire_at) {
-    return `last Railway fire ${formatDateTime(overview.last_fire_at)}`;
+    const cadence =
+      overview.period_min === null
+        ? ""
+        : overview.period_min <= 90
+          ? ", ≈hourly"
+          : overview.period_min <= 2880
+            ? ", ≈daily"
+            : `, ≈every ${Math.round(overview.period_min / 1440)} days`;
+    return `last Railway fire ${formatDateTime(overview.last_fire_at)}${cadence}`;
   }
   if (overview.fires.length === 0) return "no fire recorded yet";
   return `no Railway fire recorded — the ${overview.fires.length} newest ledger row${
@@ -102,6 +110,8 @@ export default async function SettingsPage() {
     db: dbOk && !dbError,
     schema: settings !== null && !schemaPending,
     heartbeatAlive: overview?.heartbeat_alive ?? false,
+    runNowAvailable: overview?.run_now_available ?? false,
+    periodMin: overview?.period_min ?? null,
     lastFireAt: overview?.last_fire_at ?? null,
   };
 
@@ -149,13 +159,13 @@ export default async function SettingsPage() {
               <PreconditionRow
                 ok={pre.heartbeatAlive}
                 icon={<Timer className="h-4 w-4" />}
-                label="Cron heartbeat alive (a Railway fire within 75 min)"
+                label="Cron heartbeat alive (a Railway fire within its expected window)"
                 detail={heartbeatDetail(overview)}
               />
             </ul>
-            {!pre.heartbeatAlive && (
+            {!pre.heartbeatAlive ? (
               <div className="mt-3 rounded-md bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
-                <p className="font-semibold">One-time Railway wiring (Dashboard → service → Settings):</p>
+                <p className="font-semibold">No live cron heartbeat — one-time Railway wiring (Dashboard → service → Settings):</p>
                 <ul className="mt-1 list-inside list-disc space-y-0.5">
                   <li>Cron Schedule = Custom = <code className="font-mono">0 * * * *</code> (hourly heartbeat)</li>
                   <li>Restart Policy = <code className="font-mono">Never</code></li>
@@ -168,14 +178,35 @@ export default async function SettingsPage() {
                   </li>
                 </ul>
                 <p className="mt-1.5">
-                  Until then the legacy daily 03:00 UTC fire still runs the chain once a
-                  day (the gate honours it), but <em>Run now</em> stays locked — nothing
-                  would consume the request. A git push rebuilds the cron image but does
-                  not start it (Railway reports the deploy as <code>buildOnly</code>), so
-                  deploys never fire the chain; only the cron schedule does.
+                  A git push rebuilds the cron image but does not start it (Railway reports
+                  the deploy as <code>buildOnly</code>), so deploys never fire the chain; only
+                  the cron schedule does.
                 </p>
               </div>
-            )}
+            ) : !pre.runNowAvailable ? (
+              <div className="mt-3 rounded-md bg-sky-50 p-3 text-xs text-sky-900 dark:bg-sky-900/30 dark:text-sky-200">
+                <p className="font-semibold">
+                  {pre.periodMin === null
+                    ? "Cron is wired and has fired once — not enough yet to enable Run now."
+                    : "Cron is healthy but fires about once a day — Run now stays locked."}
+                </p>
+                <p className="mt-1">
+                  {pre.periodMin === null ? (
+                    <>This is not a fault: a single Railway fire proves the cron is wired, but
+                    two are needed to learn its schedule, so it will clarify after the next
+                    fire.</>
+                  ) : (
+                    <>This is not a fault: the daily fire already runs the chain on schedule
+                    (the gate honours it), but a <em>Run now</em> request would sit until that
+                    next daily fire (up to 24h), so it is not really &ldquo;now&rdquo;.</>
+                  )}{" "}
+                  To enable on-demand runs, set Cron Schedule = Custom ={" "}
+                  <code className="font-mono">0 * * * *</code> (hourly) in the Railway
+                  Dashboard → service → Settings; the gate still runs the chain once a day, and
+                  an hourly tick lets <em>Run now</em> be picked up within the hour.
+                </p>
+              </div>
+            ) : null}
           </section>
 
           {settings && (

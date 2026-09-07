@@ -34,7 +34,7 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 | `/decision/[id]` | **Card detail** — the proposal, its rationale, and the full **evidence chain** (slot → L1 HTTP probe → redirect chain → L2 verdict → final verdict), plus single-card approve/reject. |
 | `/audit` | **Audit trail** — the append-only `audit_log`, newest first. `?event=<type>` filters to one event type (e.g. `?event=steering_cancel`, `write`, `verify`, `rollback`, `dead_letter`) with a filter chip showing the row count and a *clear filter* link — the log outgrows the page window once nightly `tool_result` traffic piles up. |
 | `/report` | **Weekly report** — live aggregates (links healed, slots fixed, decisions by status/action, audit events) over a 7/14/30-day window. pe3's scheduled digest reports these same numbers. |
-| `/settings` | **Control plane** — rotation cycle + per-site coverage/daily-budget table, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat proves the Railway wiring — every ledger row is tagged with its origin by `nightly.run_origin`, so a run started on a laptop cannot unlock it), the precondition checklist with the one-time Railway steps, and the cron ledger with its origin column. |
+| `/settings` | **Control plane** — rotation cycle + per-site coverage/daily-budget table, run hour (UTC), cron kill-switch, run-now (locked until a Railway cron fires often enough to pick it up within the hour — the heartbeat is cadence-aware, so a healthy daily cron reads alive yet keeps run-now locked until you switch to hourly; every ledger row is tagged with its origin by `nightly.run_origin`, so a run started on a laptop cannot unlock it), the precondition checklist with the one-time Railway steps, and the cron ledger with its origin column. |
 
 ## API routes
 
@@ -47,7 +47,7 @@ CLI's `decisions --json` emits — the board and the CLI are interchangeable cli
 | `GET /api/audit` | `?limit=` | `{ audit }` |
 | `GET /api/report` | `?days=` | `WeeklyStats` |
 | `POST /api/settings` | `{ rotation_cycle_days?, run_hour_utc?, enabled? }` | patch the control plane → `400` on an empty/invalid patch, `403` read-only |
-| `POST /api/settings/run-now` | — | stamp a run-now request for the next cron fire → `409` while no cron heartbeat is alive |
+| `POST /api/settings/run-now` | — | stamp a run-now request for the next cron fire → `409` while run-now is unavailable (no live heartbeat, or a daily cadence too slow to pick it up within the hour) |
 
 ## Safety
 

@@ -281,8 +281,20 @@ export const DEFAULT_SETTINGS: BoardSettings = {
   run_requested_by: null,
 };
 
-/** A cron fire older than this means the Railway heartbeat wiring is missing. */
+/** Liveness floor (minutes) AND the on-demand threshold. A fire older than the
+ * cadence-aware window (see cronOverview) means the Railway heartbeat is missing;
+ * and only a cron ticking at least this often can pick up a Run-now within the
+ * hour. The window itself widens to 1.5 × the cron's real period, so a healthy
+ * DAILY cron is no longer flagged dead for 23h a day. */
 export const HEARTBEAT_WINDOW_MIN = 75;
+
+/** Cold-start grace (minutes) when the cadence is not yet learnable (<2 Railway
+ * fires). A single [railway] row already proves the cron is wired and firing, and
+ * we cannot yet tell hourly from daily — so bridge ONE daily gap instead of
+ * false-alarming a healthy daily cron on its first day. An hourly cron resolves its
+ * real cadence at the very next fire (within the hour), so this grace is short-lived
+ * for the case that actually needs the strict floor. */
+export const HEARTBEAT_UNKNOWN_WINDOW_MIN = 25 * 60;
 
 /** Ledger rows the page shows: recent fires (liveness) + recent real runs. */
 const LEDGER_FIRE_ROWS = 12;
@@ -400,6 +412,13 @@ function isCronFire(row: NightlyRunRow): boolean {
   return parseLedgerReason(row.reason).origin === "railway";
 }
 
+/** Median of a numeric sample (robust centre: one outlier can't drag it). */
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
 /** The cron ledger + liveness: is the Railway heartbeat actually ticking?
  *
  * An hourly cron logs ~23 heartbeat skips a day, so `runs` merges the newest
@@ -407,6 +426,13 @@ function isCronFire(row: NightlyRunRow): boolean {
  * run off the page within hours and /settings could no longer answer "did it
  * run?". `fires` stays fire-only because liveness must count every tick — but
  * only the platform-driven ones (see isCronFire), never a laptop rehearsal.
+ *
+ * Liveness is CADENCE-AWARE: the window is inferred from the observed gap between
+ * Railway fires (period_min), so a healthy daily cron reads alive all day instead
+ * of going red for 23h — the false alarm that made /settings look permanently
+ * broken. Run-now is gated separately (run_now_available) because "is the cron
+ * healthy?" and "can it honour an on-demand run within the hour?" are different
+ * questions a single hardcoded 75-min check used to conflate.
  */
 export async function cronOverview(): Promise<CronOverview> {
   const sql = getSql();
@@ -436,13 +462,44 @@ export async function cronOverview(): Promise<CronOverview> {
   const lastCronFireMs = lastCronFire
     ? new Date(lastCronFire.started_at).getTime()
     : null;
+  // Infer the cron's REAL period from the gap between consecutive Railway fires
+  // instead of assuming hourly. `cronFires` is newest-first (fires came back
+  // ORDER BY started_at DESC), so each adjacent pair is one tick interval. Median
+  // — not mean — so a single missed fire or a hand-forced extra run cannot skew
+  // it: a daily cron yields ~1440 min, an hourly one ~60.
+  const fireMs = cronFires.map((r) => new Date(r.started_at).getTime());
+  const gapsMin: number[] = [];
+  for (let i = 0; i + 1 < fireMs.length; i++) {
+    const gap = (fireMs[i] - fireMs[i + 1]) / 60_000;
+    if (gap > 0) gapsMin.push(gap);
+  }
+  const periodMin = gapsMin.length ? median(gapsMin) : null;
+  // Liveness window: 1.5 × the real period, never stricter than the 75-min floor.
+  // A healthy daily cron (period 1440) stays alive for 36h — long enough to bridge
+  // its next 24h fire — so it reads GREEN all day, yet still flips RED if a daily
+  // fire is actually missed. An hourly cron (period 60) behaves as before.
+  // Cold start (<2 Railway fires => period unknown) gets a one-day grace instead of
+  // the 75-min floor: a single [railway] row already proves the cron is wired, and
+  // assuming hourly there would false-alarm a daily cron on its very first day.
+  const windowMs =
+    periodMin !== null
+      ? Math.max(HEARTBEAT_WINDOW_MIN * 60_000, periodMin * 1.5 * 60_000)
+      : HEARTBEAT_UNKNOWN_WINDOW_MIN * 60_000;
+  const heartbeatAlive =
+    lastCronFireMs !== null && Date.now() - lastCronFireMs <= windowMs;
+  // Run-now needs a fire SOON, which only a CONFIRMED sub-hourly-ish cadence can
+  // promise. An UNKNOWN cadence stays locked (honest: one fire is not yet proof it
+  // fires often enough), and a confirmed daily cadence stays locked too (the
+  // request would sit until the next 03:00). Both point at the hourly switch.
+  const runNowAvailable =
+    heartbeatAlive && periodMin !== null && periodMin <= HEARTBEAT_WINDOW_MIN;
   return {
     runs: rows,
     fires,
     last_fire_at: lastCronFire?.started_at ?? null,
-    heartbeat_alive:
-      lastCronFireMs !== null &&
-      Date.now() - lastCronFireMs <= HEARTBEAT_WINDOW_MIN * 60_000,
+    period_min: periodMin,
+    heartbeat_alive: heartbeatAlive,
+    run_now_available: runNowAvailable,
     last_run: realRuns[0] ?? null,
   };
 }

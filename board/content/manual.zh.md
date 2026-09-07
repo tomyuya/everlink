@@ -470,9 +470,12 @@ vercel --prod
    保存后页面应显示下次运行时间。
    > 决定什么时候跑全链路的是**门控**而不是调度本身：小时级 cron 一天写 ~23 条诚实的
    > heartbeat skip，只有命中 board 跑批小时的那次才跑全链——也正是它让 `/settings` 的
-   > *Run now* 能在一小时内被接走。日级调度设到跑批小时（`0 3 * * *`）同样会跑全链，
-   > 但 *Run now* 会一直锁定、心跳前置条件一天 23 小时是红的。本生产实例目前仍是日级
-   > `0 3 * * *`（`nextCronRunAt` 2026-09-07T03:00:00Z），改成小时级是剩下的唯一手工步骤。
+   > *Run now* 能在一小时内被接走。日级调度设到跑批小时（`0 3 * * *`）同样会跑全链。
+   > board 的心跳判定**感知节奏**——从台账里 Railway fire 的间隔推断 cron 的真实周期——
+   > 所以健康的日级 cron 显示**绿色 alive（≈daily）**而不再一天 23 小时红；只有 *Run now*
+   > 仍锁定，因为日级 fire 无法在一小时内接走即时触发（面板会说明并指向小时级切换）。
+   > 本生产实例目前仍是日级 `0 3 * * *`（`nextCronRunAt` 2026-09-07T03:00:00Z），改成小时级
+   > 是剩下的唯一手工步骤，也正是它解锁 *Run now*。
 3. 手工触发一次全链路（不等 cron）：
    ```bash
    railway run python scripts/nightly.py --dry-run --judge none   # 安全演练
@@ -552,7 +555,7 @@ board 展示层已有映射；不做物理重命名（风险 > 收益的既有�
 | `/decision/<id>` | 单卡详情：提案理由、NEW SENTENCE、证据链（slot 级 L1/L2 证据）、Approve/Reject 真按钮（pending 卡）或 settled 提示（已决卡） |
 | `/audit` | 全链路审计流，可按事件过滤（`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…） |
 | `/report` | 周报数字（healed / created / decided），与 CLI `report` 同构 |
-| `/settings` | 控制面：轮换周期与各站覆盖率/日预算、跑批小时（UTC）、cron 总开关、Run now（需先有活的 cron 心跳，且该心跳必须能归因到 Railway——台账每行都带 origin 标记，笔记本上手动跑一次不算）、前置条件清单、cron 台账（含 origin 列） |
+| `/settings` | 控制面：轮换周期与各站覆盖率/日预算、跑批小时（UTC）、cron 总开关、Run now（需 Railway cron 足够频繁、能在一小时内接走触发才解锁——心跳判定感知节奏，所以健康的日级 cron 显示 alive 但 Run now 仍锁定，直到切成小时级；台账每行都带 origin 标记，笔记本上手动跑一次不算）、前置条件清单、cron 台账（含 origin 列） |
 
 ### 7.2 审核流程
 

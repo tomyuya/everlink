@@ -499,10 +499,13 @@ exactly what a cron wants).
    > The GATE, not the schedule, decides when the chain runs: an hourly cron logs ~23 honest
    > heartbeat skips a day and runs the chain only on the fire matching the board's run hour —
    > which is also what lets `/settings` → *Run now* be picked up within the hour. A daily
-   > schedule set to the run hour (`0 3 * * *`) runs the chain as well, but leaves *Run now*
-   > locked and the heartbeat precondition red for 23h a day. This production instance is
-   > still on the daily `0 3 * * *` (`nextCronRunAt` 2026-09-07T03:00:00Z) — switching it to
-   > hourly in the Dashboard is the one remaining manual step.
+   > schedule set to the run hour (`0 3 * * *`) runs the chain as well. The board's heartbeat
+   > is cadence-aware — it infers the cron's real period from the ledger's Railway-fire gaps —
+   > so a healthy daily cron reads **alive (≈daily)** rather than red for 23h a day; only *Run
+   > now* stays locked, because a daily fire cannot honour an on-demand run within the hour
+   > (the panel says so and points at the hourly switch). This production instance is still on
+   > the daily `0 3 * * *` (`nextCronRunAt` 2026-09-07T03:00:00Z) — switching it to hourly in
+   > the Dashboard is the one remaining manual step, and it is what unlocks *Run now*.
 3. Trigger the chain by hand (without waiting for cron):
    ```bash
    railway run python scripts/nightly.py --dry-run --judge none   # safe rehearsal
@@ -592,7 +595,7 @@ existing risk-vs-benefit decision).
 | `/decision/<id>` | one card: rationale, NEW SENTENCE, evidence chain (slot-level L1/L2), live Approve/Reject buttons (pending) or settled notice (decided) |
 | `/audit` | full audit stream, filterable (`?event=write` / `verify` / `rollback` / `dead_letter` / `steering_cancel`…) |
 | `/report` | weekly numbers (healed / created / decided), twin of CLI `report` |
-| `/settings` | the control plane: rotation cycle + per-site coverage/budget, run hour (UTC), cron kill-switch, run-now (locked until a live cron heartbeat attributable to Railway — the ledger tags every row with its origin, so a run started on a laptop does not count), precondition checklist, cron ledger with an origin column |
+| `/settings` | the control plane: rotation cycle + per-site coverage/budget, run hour (UTC), cron kill-switch, run-now (locked until a Railway cron fires often enough to pick it up within the hour — the heartbeat is cadence-aware, so a healthy daily cron reads alive yet keeps run-now locked until you switch to hourly; the ledger tags every row with its origin, so a run started on a laptop does not count), precondition checklist, cron ledger with an origin column |
 
 ### 7.2 Review workflow
 
