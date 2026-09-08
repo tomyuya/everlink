@@ -195,14 +195,18 @@ the inbox stays deliberately minimal — one screen, not a suite.
 - **Live demo:** https://everlink-seven.vercel.app — fully interactive public deployment
   (approve/reject live; approved cards are executed by the nightly worker against EverLink's
   own mirror store — source-site DBs stay strictly read-only). Reviewer path:
-  `/` → `/inbox` (16 pending) → `/inbox?status=rejected` (69, every one carrying
-  a reason) → `/audit?event=steering_cancel` (3 rows, filter chip) → `/report` (37 healed).
-- **Demo video:** *(owner: ≤ 5:00 — narration measured **4:57**. Three acts: intro title
-  cards (positioning / scale / problem / who / why / principle / resources), a how-to +
-  two-feed-paths pass over `/`, then **two demos walked operate→process→show**: Path B
-  (first-party snapshot → live Bedrock judge → inbox → steering/verify/rollback → evals)
-  and Path A (generic read-only crawl of an unseen site). Narration in
+  `/` → `/inbox` (pending cards, batch approve/reject live) → `/inbox?status=rejected`
+  (every rejection carries a typed reason) → `/audit?event=steering_cancel` (filter chip
+  straight to the steering-cancel rows) → `/report` (healed count, verified back to zero).
+  Counts move with the nightly cron; every row behind them is real and navigable.
+- **Demo video:** *(owner: paste the YouTube URL here once uploaded (Unlisted). Final cut
+  2026-09-08: **4:59.5** total — narration measured **4:57** plus a branded "Thanks for
+  watching" end card; the ≤ 5:00 limit holds. Three acts: intro title cards (positioning /
+  scale / problem / who / why / principle / resources), a how-to + two-feed-paths pass over
+  `/`, then **two demos walked operate→process→show**: Path B (first-party snapshot → live
+  Bedrock judge → inbox → steering/verify/rollback → evals) and Path A (generic read-only
+  crawl of an unseen site). Every frame is a real capture (live board, real command output)
+  or a real render of one — nothing fabricated. Narration in
   [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) + `docs/video/vo_full.*`; shot list and
-  second-by-second cues in [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md) / the repo cue sheet;
-  re-cut 2026-09-07)*
+  second-by-second cues in [`DEMO_RUNSHEET.md`](DEMO_RUNSHEET.md) / the repo cue sheet)*
 - **Blog:** *(owner: builder.aws.com URL once published, from `BLOG_DRAFT.md`)*
