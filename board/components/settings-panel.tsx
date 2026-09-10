@@ -125,6 +125,9 @@ export function SettingsPanel({
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
             Every active slot is probed once per cycle: each nightly run takes the
             least-recently-checked slots, budget = ceil(active ÷ cycle), floor 25/site.
+            “Oldest probe performed” is the creation time of the oldest probe record
+            (when the least-recently-checked active slot was last probed) — never-checked
+            slots queue first, so it advances only after that backlog drains.
           </p>
           <label className="mt-3 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
             Full-pass cycle
@@ -149,7 +152,15 @@ export function SettingsPanel({
                   <th className="py-1 pr-2 font-medium">active</th>
                   <th className="py-1 pr-2 font-medium">daily budget</th>
                   <th className="py-1 pr-2 font-medium">covered in cycle</th>
-                  <th className="py-1 font-medium">oldest probe</th>
+                  {/* "Performed" + tooltip: the value is the creation time of the oldest
+                      probe record, NOT "last time the cron ran" — the bare label read
+                      as cron liveness and confused operators (observed 2026-09-10). */}
+                  <th
+                    className="py-1 font-medium"
+                    title="Creation time of the oldest probe record: when the least-recently-checked active slot was last probed. Rotation drains never-checked slots first, so this stays put until the backlog clears."
+                  >
+                    oldest probe performed
+                  </th>
                 </tr>
               </thead>
               <tbody>
