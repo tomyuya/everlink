@@ -202,5 +202,7 @@ export interface RotationRow {
   site: string;
   active: number;
   covered: number;
+  /** Active slots probed at least once ever — first-full-pass progress. */
+  checked: number;
   oldest: string | null;
 }

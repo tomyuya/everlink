@@ -71,6 +71,27 @@ export function SettingsPanel({
     hour !== settings.run_hour_utc ||
     enabled !== settings.enabled;
 
+  // First-full-pass progress: active slots probed at least once vs. all active
+  // slots, plus a nights-left ETA from the same per-site budgets the table
+  // shows. Never-checked slots drain first, so the slowest site sets the pace.
+  const totActive = rotation.reduce((s, r) => s + r.active, 0);
+  const totChecked = rotation.reduce((s, r) => s + Math.min(r.checked, r.active), 0);
+  const passPct = totActive > 0 ? (totChecked / totActive) * 100 : 0;
+  const perSite = rotation.map((r) => {
+    const remaining = Math.max(0, r.active - r.checked);
+    return {
+      site: r.site,
+      checked: r.checked,
+      active: r.active,
+      nights: remaining > 0 ? Math.ceil(remaining / siteBudget(r.active, cycle)) : 0,
+    };
+  });
+  const nightsLeft = perSite.reduce((m, r) => Math.max(m, r.nights), 0);
+  const etaDate =
+    nightsLeft > 0
+      ? new Date(Date.now() + nightsLeft * 86_400_000).toISOString().slice(0, 10)
+      : null;
+
   async function save() {
     setBusy("save");
     setMsg(null);
@@ -129,6 +150,53 @@ export function SettingsPanel({
             (when the least-recently-checked active slot was last probed) — never-checked
             slots queue first, so it advances only after that backlog drains.
           </p>
+          {/* Overall first-pass progress: the table's "covered in cycle" answers
+              "is the cycle keeping up"; this strip answers "how far along is the
+              very first pass over every slot" — the question operators actually
+              ask (observed 2026-09-12). ETA tracks the cycle knob live. */}
+          {rotation.length > 0 && (
+            <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                  First full pass
+                </span>
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  {totChecked.toLocaleString()} / {totActive.toLocaleString()} active
+                  slots checked · {passPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-sky-500"
+                  style={{ width: `${passPct}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                {nightsLeft > 0 ? (
+                  <>
+                    ≈{nightsLeft} nightly runs until every active slot has been
+                    checked once (ETA ≈ {etaDate}) — never-checked slots queue
+                    first and the slowest site sets the pace. Per site:{" "}
+                    {perSite.map((r, i) => (
+                      <span key={r.site}>
+                        {i > 0 && " · "}
+                        {siteLabel(r.site)} {r.checked.toLocaleString()}/
+                        {r.active.toLocaleString()}
+                        {r.nights > 0 ? `, ≈${r.nights} nights left` : ", done"}
+                      </span>
+                    ))}
+                    .
+                  </>
+                ) : (
+                  <>
+                    Every active slot has been checked at least once — rotation
+                    now re-probes the least-recently-checked slots first, once
+                    per {cycle}-day cycle.
+                  </>
+                )}
+              </p>
+            </div>
+          )}
           <label className="mt-3 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
             Full-pass cycle
             <input

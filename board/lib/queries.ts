@@ -513,6 +513,8 @@ export async function rotationCoverage(cycleDays: number): Promise<RotationRow[]
                count(*) FILTER (WHERE status = 'active')::int AS active,
                count(*) FILTER (WHERE status = 'active'
                                   AND last_checked_at >= ${cutoff}::timestamptz)::int AS covered,
+               count(*) FILTER (WHERE status = 'active'
+                                  AND last_checked_at IS NOT NULL)::int AS checked,
                min(last_checked_at) FILTER (WHERE status = 'active') AS oldest
         FROM link_slots GROUP BY site ORDER BY site`,
   );
