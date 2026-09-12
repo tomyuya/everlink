@@ -402,6 +402,43 @@ def finish_run(conn, run_id: int, status: str, summary: dict | None = None) -> N
     conn.commit()
 
 
+def update_run_summary(conn, run_id: int, summary: dict) -> None:
+    """Mid-run checkpoint: persist the step results gathered so far.
+
+    A process that dies before finish_run (platform kill, crash outside the
+    step chain) otherwise leaves no trace of how far the chain got — the
+    operator next morning sees a bare 'running' row and no evidence.
+    """
+    _assert_writable(conn.info.dsn or "")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE nightly_runs SET summary = %s WHERE id = %s",
+                    (json.dumps(summary, default=str), run_id))
+    conn.commit()
+
+
+def reap_stale_runs(conn, older_than_hours: int = 3) -> list[int]:
+    """Close 'running' rows whose process died before finish_run.
+
+    A run that ends normally always finalizes; a row still 'running' hours
+    later means the process was killed or crashed outside the step chain.
+    Left alone it makes the ledger lie and muddies the in-flight gate, so the
+    next fire reaps it as 'fail' with an honest reason. The window sits well
+    above the observed chain length (scan + judge finish inside the hour), so
+    a genuinely in-flight run is never touched, and a same-day second run
+    stays impossible — the gate still sees today's row, reaped or not.
+    """
+    _assert_writable(conn.info.dsn or "")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE nightly_runs SET status = 'fail', finished_at = now(), "
+                    "reason = reason || ' | reaped: process died before finalize' "
+                    "WHERE kind = 'run' AND status = 'running' "
+                    "AND started_at < now() - make_interval(hours => %s) "
+                    "RETURNING id", (older_than_hours,))
+        ids = [int(r[0]) for r in cur.fetchall()]
+    conn.commit()
+    return ids
+
+
 def prune_heartbeats(conn, keep_days: int = 14) -> int:
     """Drop heartbeat rows older than ``keep_days``; every real run is kept.
 

@@ -279,26 +279,31 @@ def plan_steps(args: argparse.Namespace, today: date | None = None,
     return plan
 
 
-def run_steps(plan: Plan, runner=cli.main) -> list[StepResult]:
+def run_steps(plan: Plan, runner=cli.main, progress=None) -> list[StepResult]:
     """Execute each planned step via ``runner`` (default: the real CLI main).
 
     The runner is injectable so tests can record the argv without touching a DB, AWS,
     or the network. A step that raises is captured as code -1 (the cron keeps going and
-    reports it) so one bad site never silently aborts the whole night.
+    reports it) so one bad site never silently aborts the whole night. ``progress``,
+    when given, is called with the results so far after every step so the caller can
+    checkpoint them into the ledger — how far the chain got survives even if this
+    process dies before finalize.
     """
     results: list[StepResult] = []
     for step in plan.steps:
         if step.argv is None:
             results.append(StepResult(step.label, None, step.note))
-            continue
-        try:
-            code = runner(step.argv)
-        except SystemExit as e:              # argparse exits via SystemExit
-            code = int(e.code or 0)
-        except Exception as e:  # noqa: BLE001 - keep the chain going, report honestly
-            code = -1
-            step.note = f"{type(e).__name__}: {e}"
-        results.append(StepResult(step.label, code, step.note))
+        else:
+            try:
+                code = runner(step.argv)
+            except SystemExit as e:              # argparse exits via SystemExit
+                code = int(e.code or 0)
+            except Exception as e:  # noqa: BLE001 - keep the chain going, report honestly
+                code = -1
+                step.note = f"{type(e).__name__}: {e}"
+            results.append(StepResult(step.label, code, step.note))
+        if progress is not None:
+            progress(results)
     return results
 
 
@@ -390,6 +395,17 @@ def main(argv: list[str] | None = None) -> int:
         try:
             conn = db.connect(dsn)
             db.ensure_schema(conn)
+            # Reap before the gate reads run state: a row still 'running' from a
+            # process that died hours ago must not pose as a live run (observed
+            # 2026-09-12: four nights of stuck rows made the ledger lie).
+            try:
+                reaped = db.reap_stale_runs(conn)
+                if reaped:
+                    print(f"[nightly] ledger: reaped stale run row(s) {reaped} — "
+                          f"those processes died before finalize; marked fail")
+            except Exception as e:  # noqa: BLE001 - reaping must never crash a fire
+                print(f"[nightly] stale-run reap failed ({e}); continuing",
+                      file=sys.stderr)
             settings = db.get_settings(conn)
             now = datetime.now(timezone.utc)
             ran_today, in_flight = _run_state(conn, now)
@@ -442,18 +458,50 @@ def main(argv: list[str] | None = None) -> int:
         db.ensure_schema(conn)
         run_id = db.insert_run(conn, "run", "running", tag_reason(origin, trigger))
 
+    def _summary_payload(results: list[StepResult]) -> dict:
+        return {"trigger": trigger, "origin": origin, "budgets": budgets,
+                "steps": [{"label": r.label, "code": r.code,
+                           **({"note": r.note} if r.note else {})}
+                          for r in results]}
+
+    def _checkpoint(results: list[StepResult]) -> None:
+        """Best-effort per-step ledger checkpoint (see db.update_run_summary)."""
+        if run_id is None or conn is None:
+            return
+        try:
+            db.update_run_summary(conn, run_id, _summary_payload(results))
+        except Exception as e:  # noqa: BLE001 - a checkpoint must never fail a step
+            print(f"[nightly] ledger checkpoint failed ({e}); continuing",
+                  file=sys.stderr)
+
     plan = plan_steps(args, budgets=budgets)
     _print_plan(plan, args)
-    results = run_steps(plan)
+    results = run_steps(plan, progress=_checkpoint)
     ok = _print_summary(results)
     if run_id is not None and conn is not None:
         codes = [r.code for r in results if r.code is not None]
         status = "ok" if ok else ("degraded" if all(c in (0, 2) for c in codes) else "fail")
-        db.finish_run(conn, run_id, status,
-                      {"trigger": trigger, "origin": origin, "budgets": budgets,
-                       "steps": [{"label": r.label, "code": r.code} for r in results]})
-        _prune_ledger(conn)
-        conn.close()
+        payload = _summary_payload(results)
+        try:
+            db.finish_run(conn, run_id, status, payload)
+            _prune_ledger(conn)
+        except Exception as e:  # noqa: BLE001 - the ledger must not lie silently
+            print(f"[nightly] finalize failed on the run connection "
+                  f"({type(e).__name__}: {e}); retrying on a fresh one",
+                  file=sys.stderr)
+            try:
+                fresh = db.connect(dsn)
+                db.finish_run(fresh, run_id, status, payload)
+                _prune_ledger(fresh)
+                fresh.close()
+            except Exception as e2:  # noqa: BLE001 - last resort: a later fire reaps
+                print(f"[nightly] finalize retry failed ({type(e2).__name__}: {e2}); "
+                      f"a later fire will reap this row as stale", file=sys.stderr)
+        finally:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001 - best-effort close
+                pass
     print(f"\n[nightly] {'all executed steps ok' if ok else 'one or more steps did not exit 0'} "
           f"({len(plan.executed)} run, {len(plan.skipped)} skipped).")
     return 0 if ok else 1

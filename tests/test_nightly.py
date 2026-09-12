@@ -212,6 +212,24 @@ def test_run_steps_captures_systemexit_as_its_code():
     assert scan_res.code == 2                              # captured, not re-raised
 
 
+def test_run_steps_checkpoints_progress_after_every_step():
+    seen = []
+
+    def fake(argv):
+        return 0
+
+    def progress(results):
+        seen.append([r.label for r in results])
+
+    plan = nightly.plan_steps(_ns("--sites", "aethelgem"), today=WED)
+    nightly.run_steps(plan, runner=fake, progress=progress)
+    # one checkpoint per step, each carrying every result so far — this is what
+    # lets the ledger show how far the chain got if the process dies pre-finalize
+    assert seen == [["scan:aethelgem"],
+                    ["scan:aethelgem", "notify"],
+                    ["scan:aethelgem", "notify", "worker"]]
+
+
 def test_print_summary_ok_ignores_skips_and_flags_failures():
     assert nightly._print_summary(
         [nightly.StepResult("scan:a", 0), nightly.StepResult("worker", None, "skipped")]) is True
