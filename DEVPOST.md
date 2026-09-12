@@ -141,7 +141,7 @@ Mantle gateway today; direct Claude the moment the account's allowlist gate clea
   prove the oracle isn't vacuous.
 - The **closed loop**: `verify_fix` re-probes after every write and rolls back on failure.
   On the seeded demo night, 37 dead links verify back to zero — and I show a rollback too.
-- **319 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
+- **320 passing tests**, fully offline; a `generic` read-only adapter that scans any blog
   EverLink has never seen; a seeded live board so a judge never opens an empty inbox.
 - A **cadence-aware cron heartbeat**: the board infers the cron's real period from the
   ledger's fire gaps instead of assuming hourly, so a healthy daily cron reads alive all
@@ -199,7 +199,7 @@ the inbox stays deliberately minimal — one screen, not a suite.
   (every rejection carries a typed reason) → `/audit?event=steering_cancel` (filter chip
   straight to the steering-cancel rows) → `/report` (healed count, verified back to zero).
   Counts move with the nightly cron; every row behind them is real and navigable.
-- **Demo video:** *(owner: paste the YouTube URL here once uploaded (Unlisted). Final cut
+- **Demo video:** https://youtu.be/4llL5iby024 *(public. Final cut
   2026-09-08: **4:59.5** total — narration measured **4:57** plus a branded "Thanks for
   watching" end card; the ≤ 5:00 limit holds. Three acts: intro title cards (positioning /
   scale / problem / who / why / principle / resources), a how-to + two-feed-paths pass over
