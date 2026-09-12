@@ -9,7 +9,7 @@ import {
 
 import { SettingsPanel } from "@/components/settings-panel";
 import { isConfigured } from "@/lib/db";
-import { cronOverview, getSettings, parseLedgerReason, rotationCoverage } from "@/lib/queries";
+import { cronOverview, getSettings, parseLedgerReason, probeNights, rotationCoverage } from "@/lib/queries";
 import type { LedgerOrigin } from "@/lib/queries";
 import type { BoardSettings, CronOverview, NightlyRunRow, RotationRow } from "@/lib/types";
 import { formatDateTime, safeJsonParse } from "@/lib/utils";
@@ -71,6 +71,7 @@ export default async function SettingsPage() {
   let settings: BoardSettings | null = null;
   let overview: CronOverview | null = null;
   let rotation: RotationRow[] = [];
+  let nights: number | null = null;
   let dbError: string | null = null;
   let schemaPending = false;
 
@@ -102,6 +103,15 @@ export default async function SettingsPage() {
         console.error("[settings] rotationCoverage failed:", message);
         if (isSchemaMissing(message)) schemaPending = true;   // last_checked_at not migrated yet
         else dbError = message;
+      }
+      if (rotation.length > 0) {
+        try {
+          nights = await probeNights();
+        } catch (e) {
+          // cosmetic context only — never fail the page over the nights count
+          console.error("[settings] probeNights failed:",
+                        e instanceof Error ? e.message : e);
+        }
       }
     }
   }
@@ -210,7 +220,7 @@ export default async function SettingsPage() {
           </section>
 
           {settings && (
-            <SettingsPanel settings={settings} pre={pre} rotation={rotation} />
+            <SettingsPanel settings={settings} pre={pre} rotation={rotation} nights={nights} />
           )}
 
           {/* ------------------------------------------------ run ledger ----- */}

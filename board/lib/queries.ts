@@ -519,3 +519,17 @@ export async function rotationCoverage(cycleDays: number): Promise<RotationRow[]
         FROM link_slots GROUP BY site ORDER BY site`,
   );
 }
+
+/** Distinct UTC nights that ever landed a probe. First-pass progress tracks
+ * run nights, NOT calendar days: a night where the chain did not run (setup,
+ * a lost run) leaves progress flat, and a low percentage then reads as
+ * "behind schedule" even when the per-night pace is exactly on plan
+ * (misread observed 2026-09-12). The run ledger lists every fire. */
+export async function probeNights(): Promise<number> {
+  const sql = getSql();
+  const rows = await query<{ nights: number }[]>(
+    sql`SELECT count(DISTINCT (last_checked_at AT TIME ZONE 'UTC')::date)::int AS nights
+        FROM link_slots WHERE last_checked_at IS NOT NULL`,
+  );
+  return rows[0]?.nights ?? 0;
+}

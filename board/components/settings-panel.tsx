@@ -53,10 +53,13 @@ export function SettingsPanel({
   settings,
   pre,
   rotation,
+  nights,
 }: {
   settings: BoardSettings;
   pre: SettingsPreconditions;
   rotation: RotationRow[];
+  /** Distinct nights that ever landed a probe (null = not readable). */
+  nights: number | null;
 }) {
   const router = useRouter();
   const [cycle, setCycle] = useState(settings.rotation_cycle_days);
@@ -176,7 +179,16 @@ export function SettingsPanel({
                   <>
                     ≈{nightsLeft} nightly runs until every active slot has been
                     checked once (ETA ≈ {etaDate}) — never-checked slots queue
-                    first and the slowest site sets the pace. Per site:{" "}
+                    first and the slowest site sets the pace.
+                    {nights !== null && nights > 0 && (
+                      <>
+                        {" "}Progress tracks run nights, not calendar days:
+                        probes have landed on {nights} night{nights === 1 ? "" : "s"}
+                        so far, and a night where the chain did not run leaves
+                        progress flat — the run ledger below lists every fire.
+                      </>
+                    )}
+                    {" "}Per site:{" "}
                     {perSite.map((r, i) => (
                       <span key={r.site}>
                         {i > 0 && " · "}
