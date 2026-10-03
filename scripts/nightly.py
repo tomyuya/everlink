@@ -66,9 +66,29 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import psycopg
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from everlink import cli, db  # noqa: E402
+
+# Only genuine CONNECTION faults justify swapping in a fresh ledger connection: an
+# idle SSL session severed mid-run (Neon), a dropped socket, a reconnect blip. A
+# permission or SQL error (InsufficientPrivilege / SyntaxError) is NOT a disconnect
+# — blindly reconnecting would loop forever and hide a real misconfiguration, so
+# those fail the operation directly instead of triggering a retry.
+_RETRYABLE = (psycopg.OperationalError, psycopg.InterfaceError,
+              psycopg.errors.ConnectionFailure)
+
+
+def _safe_close(conn) -> None:
+    """Close a ledger connection best-effort; never let cleanup mask a result."""
+    if conn is None:
+        return
+    try:
+        conn.close()
+    except Exception:  # noqa: BLE001 - best-effort close
+        pass
 
 DEFAULT_SITES = ("aethelgem", "sandcart", "hotdeals")   # scan all three read-only (spec §4.1)
 DEFAULT_JUDGE = "mantle"                                # the real nightly uses the LLM judge
@@ -428,12 +448,16 @@ def main(argv: list[str] | None = None) -> int:
                 db.set_settings(conn, {"run_requested_at": None, "run_requested_by": None},
                                 by="nightly")     # consume the board run-now request
         except Exception as e:  # noqa: BLE001 - the gate must never crash a fire
-            print(f"[nightly] gate: operational DB unreachable ({type(e).__name__}: {e}) "
-                  f"-> skipping this fire (nothing would persist; --force overrides)",
+            # A fire that cannot read its own schedule cannot persist anything either,
+            # so it is a FAILURE (exit 1), not a silent "skip" a monitor would misread
+            # as a healthy heartbeat. The raw error is redacted to its type: a DB error
+            # string can carry the DSN/host, which must never reach the cron logs.
+            print(f"[nightly] gate: operational DB unreachable ({type(e).__name__}) "
+                  f"-> failing this fire (nothing persisted; --force overrides)",
                   file=sys.stderr)
-            if conn is not None:
-                conn.close()
-            return 0
+            _safe_close(conn)
+            conn = None
+            return 1
     else:
         trigger = "--force" if args.force else "no-DB (offline smoke)"
 
@@ -465,46 +489,114 @@ def main(argv: list[str] | None = None) -> int:
                           for r in results]}
 
     def _checkpoint(results: list[StepResult]) -> None:
-        """Best-effort per-step ledger checkpoint (see db.update_run_summary)."""
-        if run_id is None or conn is None:
+        """Best-effort per-step ledger checkpoint (see db.update_run_summary).
+
+        Only a genuine CONNECTION fault (_RETRYABLE) justifies swapping in one fresh
+        connection: a long scan (~20min) can leave the ledger socket idle long enough
+        for Neon to sever it. A permission/SQL error is NOT a disconnect, so it is
+        logged and the connection is kept intact for finalize to report honestly.
+        If the single fresh candidate also fails, BOTH connections are retired and the
+        shared conn is invalidated (None); the next checkpoint or finalize recovers.
+        """
+        nonlocal conn
+        if run_id is None:
             return
+        if conn is None:
+            # A previous checkpoint invalidated the shared connection: recover once.
+            try:
+                conn = db.connect(dsn)
+            except Exception as e:  # noqa: BLE001 - a checkpoint must never fail a step
+                print(f"[nightly] ledger checkpoint reconnect failed ({type(e).__name__}); "
+                      f"continuing without a checkpoint", file=sys.stderr)
+                conn = None
+                return
         try:
             db.update_run_summary(conn, run_id, _summary_payload(results))
-        except Exception as e:  # noqa: BLE001 - a checkpoint must never fail a step
-            print(f"[nightly] ledger checkpoint failed ({e}); continuing",
-                  file=sys.stderr)
+        except _RETRYABLE as e:  # noqa: BLE001 - a checkpoint must never fail a step
+            print(f"[nightly] ledger checkpoint failed ({type(e).__name__}); "
+                  f"switching to a fresh connection", file=sys.stderr)
+            old = conn
+            try:
+                conn = db.connect(dsn)
+            except Exception as e2:  # noqa: BLE001 - the candidate itself could not open
+                print(f"[nightly] ledger checkpoint reconnect failed ({type(e2).__name__}); "
+                      f"invalidating the ledger connection", file=sys.stderr)
+                _safe_close(old)
+                conn = None
+                return
+            try:
+                db.update_run_summary(conn, run_id, _summary_payload(results))
+            except Exception as e3:  # noqa: BLE001 - the fresh candidate also failed
+                print(f"[nightly] ledger checkpoint retry failed ({type(e3).__name__}); "
+                      f"invalidating the ledger connection", file=sys.stderr)
+                _safe_close(old)
+                _safe_close(conn)
+                conn = None
+                return
+            _safe_close(old)          # fresh write landed: retire the severed connection
+        except Exception as e:  # noqa: BLE001 - non-connection fault: keep conn, do not retry
+            print(f"[nightly] ledger checkpoint failed ({type(e).__name__}); "
+                  f"continuing (not a connection fault)", file=sys.stderr)
 
     plan = plan_steps(args, budgets=budgets)
     _print_plan(plan, args)
     results = run_steps(plan, progress=_checkpoint)
     ok = _print_summary(results)
-    if run_id is not None and conn is not None:
+    ledger_ok = True
+    if run_id is not None:
         codes = [r.code for r in results if r.code is not None]
         status = "ok" if ok else ("degraded" if all(c in (0, 2) for c in codes) else "fail")
         payload = _summary_payload(results)
-        try:
-            db.finish_run(conn, run_id, status, payload)
-            _prune_ledger(conn)
-        except Exception as e:  # noqa: BLE001 - the ledger must not lie silently
-            print(f"[nightly] finalize failed on the run connection "
-                  f"({type(e).__name__}: {e}); retrying on a fresh one",
-                  file=sys.stderr)
+        if conn is None:
+            # A checkpoint invalidated the shared connection: recover once to finalize.
             try:
-                fresh = db.connect(dsn)
-                db.finish_run(fresh, run_id, status, payload)
-                _prune_ledger(fresh)
-                fresh.close()
-            except Exception as e2:  # noqa: BLE001 - last resort: a later fire reaps
-                print(f"[nightly] finalize retry failed ({type(e2).__name__}: {e2}); "
+                conn = db.connect(dsn)
+            except Exception as e:  # noqa: BLE001 - last resort: a later fire reaps
+                print(f"[nightly] finalize: ledger reconnect failed ({type(e).__name__}); "
                       f"a later fire will reap this row as stale", file=sys.stderr)
-        finally:
+                ledger_ok = False
+        if conn is not None:
             try:
-                conn.close()
-            except Exception:  # noqa: BLE001 - best-effort close
-                pass
+                db.finish_run(conn, run_id, status, payload)
+            except _RETRYABLE as e:  # noqa: BLE001 - only a real disconnect earns one retry
+                print(f"[nightly] finalize failed on the run connection "
+                      f"({type(e).__name__}); retrying on a fresh one",
+                      file=sys.stderr)
+                old = conn
+                conn = None
+                try:
+                    fresh = db.connect(dsn)
+                except Exception as e2:  # noqa: BLE001 - the fresh candidate could not open
+                    print(f"[nightly] finalize reconnect failed ({type(e2).__name__}); "
+                          f"a later fire will reap this row as stale", file=sys.stderr)
+                    _safe_close(old)
+                    ledger_ok = False
+                else:
+                    try:
+                        db.finish_run(fresh, run_id, status, payload)
+                    except Exception as e3:  # noqa: BLE001 - exhausted: a later fire reaps
+                        print(f"[nightly] finalize retry failed ({type(e3).__name__}); "
+                              f"a later fire will reap this row as stale", file=sys.stderr)
+                        _safe_close(old)
+                        _safe_close(fresh)
+                        ledger_ok = False
+                    else:
+                        _prune_ledger(fresh)
+                        _safe_close(old)
+                        _safe_close(fresh)
+            except Exception as e:  # noqa: BLE001 - non-connection fault: never retried
+                print(f"[nightly] finalize failed ({type(e).__name__}); "
+                      f"not retrying a non-connection error", file=sys.stderr)
+                _safe_close(conn)
+                conn = None
+                ledger_ok = False
+            else:
+                _prune_ledger(conn)
+                _safe_close(conn)
+                conn = None
     print(f"\n[nightly] {'all executed steps ok' if ok else 'one or more steps did not exit 0'} "
           f"({len(plan.executed)} run, {len(plan.skipped)} skipped).")
-    return 0 if ok else 1
+    return 0 if (ok and ledger_ok) else 1
 
 
 if __name__ == "__main__":

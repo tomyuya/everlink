@@ -316,6 +316,229 @@ def test_tag_reason_keeps_the_verdict_readable_and_machine_parsable():
     assert nightly.tag_reason("local", "") == "[local] "                   # never drops the tag
 
 
+# 通过 main + 原始 run_steps 驱动闭包生命周期；runner/DB 全部替身化。
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import psycopg
+import pytest
+
+
+class _LedgerConn:
+    def __init__(self, name):
+        self.name = name
+        self.closed = False
+        self.close_calls = 0
+        self.info = SimpleNamespace(dsn="postgresql://test@example.invalid/own")
+
+    def close(self):
+        self.close_calls += 1
+        self.closed = True
+
+    def cursor(self):
+        pytest.fail("nightly 回归不允许未注入的 SQL")
+
+
+@pytest.fixture
+def ledger_io(monkeypatch):
+    old, candidate, recovered = [_LedgerConn(name) for name in ("old", "candidate", "recovered")]
+    state = SimpleNamespace(
+        old=old, candidate=candidate, recovered=recovered,
+        writes={"checkpoint": [], "finalize": []}, failures={"checkpoint": {}, "finalize": {}},
+        observations=[], step_codes=[0, 0],
+        plan=nightly.Plan([nightly.Step("scan:synthetic-a", ["scan", "a"]),
+                           nightly.Step("scan:synthetic-b", ["scan", "b"])]))
+    state.connect = Mock(side_effect=[old, candidate, recovered])
+    monkeypatch.setenv("EVERLINK_DATABASE_URL", old.info.dsn)
+    monkeypatch.setenv("EVERLINK_CRON_ORIGIN", "local")
+    for name in nightly.db.SOURCE_DSN_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("nightly 回归禁止真实 CLI/网络/数据库连接")
+
+    monkeypatch.setattr(psycopg, "connect", forbidden)
+    monkeypatch.setattr(nightly.cli, "main", forbidden)
+    monkeypatch.setattr(nightly.db, "connect", state.connect)
+    monkeypatch.setattr(nightly.db, "ensure_schema", Mock())
+    monkeypatch.setattr(nightly.db, "reap_stale_runs", Mock(return_value=[]))
+    monkeypatch.setattr(nightly.db, "get_settings", Mock(return_value=nightly.db.default_settings()))
+    monkeypatch.setattr(nightly.db, "set_settings", Mock())
+    monkeypatch.setattr(nightly.db, "count_active_slots", Mock(return_value={}))
+    monkeypatch.setattr(nightly.db, "prune_heartbeats", Mock(return_value=0))
+    monkeypatch.setattr(nightly.db, "insert_run", Mock(return_value=41))
+    monkeypatch.setattr(nightly, "_run_state", Mock(return_value=(False, False)))
+
+    def record(phase, conn, run_id, payload, status=None):
+        assert run_id == 41
+        state.writes[phase].append((conn, payload, status))
+        if conn.closed:
+            raise psycopg.InterfaceError("synthetic closed connection")
+        errors = state.failures[phase].get(conn, [])
+        if errors:
+            raise errors.pop(0)
+
+    monkeypatch.setattr(nightly.db, "update_run_summary",
+                        lambda c, rid, payload: record("checkpoint", c, rid, payload))
+    monkeypatch.setattr(nightly.db, "finish_run",
+                        lambda c, rid, status, summary=None: record("finalize", c, rid, summary, status))
+    monkeypatch.setattr(nightly, "plan_steps", lambda *a, **k: state.plan)
+    real_run_steps = nightly.run_steps
+
+    def run(plan, runner=None, progress=None):
+        codes = iter(state.step_codes)
+
+        def checkpoint(results):
+            if progress is not None:
+                progress(results)
+            state.observations.append((state.connect.call_count, old.closed, candidate.closed))
+
+        return real_run_steps(plan, runner=lambda argv: next(codes), progress=checkpoint)
+
+    monkeypatch.setattr(nightly, "run_steps", run)
+    state.argv = ["--force", "--select", "head", "--limit", "1", "--sites", "synthetic"]
+    return state
+
+
+class TestNightlyLedgerContract:
+    @pytest.mark.parametrize("error_type", [psycopg.OperationalError, psycopg.InterfaceError,
+                                            psycopg.errors.ConnectionFailure])
+    def test_connection_checkpoint_retries_once_and_replaces_shared_connection(self, ledger_io, error_type):
+        io = ledger_io
+        io.failures["checkpoint"][io.old] = [error_type("synthetic disconnect")]
+        assert nightly.main(io.argv) == 0
+        assert io.connect.call_count == 2
+        assert [row[0] for row in io.writes["checkpoint"]] == [io.old, io.candidate, io.candidate]
+        assert [row[0] for row in io.writes["finalize"]] == [io.candidate]
+        assert io.observations[0] == (2, True, False)
+        assert io.old.closed and io.candidate.closed
+
+    @pytest.mark.parametrize("error_type", [psycopg.errors.InsufficientPrivilege,
+                                            psycopg.errors.SyntaxError])
+    def test_checkpoint_permission_and_sql_failures_do_not_blindly_reconnect(self, ledger_io, error_type):
+        io = ledger_io
+        io.failures["checkpoint"][io.old] = [error_type("synthetic SQL failure")]
+        nightly.main(io.argv)
+        assert io.observations[0][0] == 1
+        assert io.connect.call_count == 1
+        assert io.old.closed
+
+    @pytest.mark.parametrize("recovery_at", ["checkpoint", "finalize"])
+    @pytest.mark.parametrize("failure_at", ["connect", "candidate_write"])
+    def test_failed_candidate_is_invalidated_and_later_operation_can_reconnect(
+            self, ledger_io, recovery_at, failure_at):
+        io = ledger_io
+        io.failures["checkpoint"][io.old] = [psycopg.OperationalError("synthetic idle disconnect")]
+        if failure_at == "connect":
+            io.connect.side_effect = [io.old, psycopg.OperationalError("synthetic connect failure"), io.recovered]
+        else:
+            io.failures["checkpoint"][io.candidate] = [psycopg.OperationalError("synthetic candidate failure")]
+        if recovery_at == "finalize":
+            io.plan.steps = io.plan.steps[:1]
+        nightly.main(io.argv)
+        # 同一 checkpoint 最多取得一次候选，重试失败后不能留下旧引用或坏候选。
+        assert io.observations[0][0] == 2
+        assert io.observations[0][1] is True
+        if failure_at == "candidate_write":
+            assert io.observations[0][2] is True
+        expected = [io.old] + ([io.candidate] if failure_at == "candidate_write" else [])
+        if recovery_at == "checkpoint":
+            expected += [io.recovered]
+        assert [row[0] for row in io.writes["checkpoint"]] == expected
+        assert [row[0] for row in io.writes["finalize"]] == [io.recovered]
+        assert io.connect.call_count == 3
+        assert io.recovered.closed
+
+    @pytest.mark.parametrize("failure_at", ["connect", "write"])
+    def test_exhausted_finalize_retry_is_failure_and_closes_every_candidate(self, ledger_io, failure_at):
+        io = ledger_io
+        io.failures["finalize"][io.old] = [psycopg.OperationalError("synthetic finalize disconnect")]
+        if failure_at == "connect":
+            io.connect.side_effect = [io.old, psycopg.OperationalError("synthetic reconnect failure")]
+        else:
+            io.failures["finalize"][io.candidate] = [psycopg.OperationalError("synthetic finalize failure")]
+        result = nightly.main(io.argv)
+        assert io.old.closed
+        if failure_at == "write":
+            assert io.candidate.closed
+        assert io.connect.call_count == 2
+        assert result == 1
+
+    def test_successful_fresh_finalize_closes_both_connections(self, ledger_io):
+        io = ledger_io
+        io.failures["finalize"][io.old] = [psycopg.OperationalError("synthetic disconnect")]
+        assert nightly.main(io.argv) == 0
+        assert [row[0] for row in io.writes["finalize"]] == [io.old, io.candidate]
+        assert io.connect.call_count == 2
+        assert io.old.closed and io.candidate.closed
+
+    @pytest.mark.parametrize("error_type", [psycopg.errors.InsufficientPrivilege,
+                                            psycopg.errors.SyntaxError])
+    def test_finalize_permission_and_sql_failures_are_not_retried(self, ledger_io, error_type):
+        io = ledger_io
+        io.failures["finalize"][io.old] = [error_type("synthetic final SQL failure")]
+        result = nightly.main(io.argv)
+        assert io.connect.call_count == 1
+        assert io.old.closed
+        assert result == 1
+
+    @pytest.mark.parametrize("code,status,exit_code", [(0, "ok", 0), (2, "degraded", 1), (1, "fail", 1)])
+    def test_scan_exit_and_ledger_status_remain_honest(self, ledger_io, code, status, exit_code):
+        io = ledger_io
+        io.step_codes = [code, 0]
+        assert nightly.main(io.argv) == exit_code
+        conn, summary, saved_status = io.writes["finalize"][-1]
+        assert saved_status == status
+        assert summary["steps"][0]["code"] == code
+        assert conn.closed
+
+    @pytest.mark.parametrize("boundary", ["connect", "settings", "run_state"])
+    def test_schedule_read_failure_is_nonzero_not_successful_skip(self, ledger_io, boundary):
+        io = ledger_io
+        error = psycopg.OperationalError("synthetic schedule failure")
+        if boundary == "connect":
+            io.connect.side_effect = error
+        elif boundary == "settings":
+            nightly.db.get_settings.side_effect = error
+        else:
+            nightly._run_state.side_effect = error
+        assert nightly.main([]) == 1
+        assert not io.writes["checkpoint"] and not io.writes["finalize"]
+        if boundary != "connect":
+            assert io.old.closed
+
+    def test_already_ran_today_remains_a_successful_heartbeat_skip(self, ledger_io):
+        io = ledger_io
+        nightly._run_state.return_value = (True, False)
+        assert nightly.main([]) == 0
+        args = nightly.db.insert_run.call_args.args
+        assert args[1:3] == ("heartbeat", "skipped")
+        assert "already ran today" in args[3]
+        assert not io.writes["checkpoint"] and not io.writes["finalize"]
+        assert io.old.closed
+
+    def test_prune_failure_does_not_rewrite_successful_finalize(self, ledger_io, capsys):
+        io = ledger_io
+        nightly.db.prune_heartbeats.side_effect = psycopg.OperationalError("synthetic prune failure")
+        assert nightly.main(io.argv) == 0
+        assert len(io.writes["finalize"]) == 1
+        assert io.writes["finalize"][0][2] == "ok"
+        captured = capsys.readouterr()
+        assert "prune" in captured.err.lower()
+        assert "finalize failed" not in captured.err.lower()
+        assert io.connect.call_count == 1 and io.old.closed
+
+    def test_prune_and_finalize_failures_are_reported_as_separate_operations(self, ledger_io, capsys):
+        io = ledger_io
+        io.failures["finalize"][io.old] = [psycopg.OperationalError("synthetic disconnect")]
+        nightly.db.prune_heartbeats.side_effect = psycopg.OperationalError("synthetic prune failure")
+        assert nightly.main(io.argv) == 0
+        captured = capsys.readouterr()
+        assert "finalize" in captured.err.lower() and "prune" in captured.err.lower()
+        assert len(io.writes["finalize"]) == 2
+        assert io.old.closed and io.candidate.closed
+
+
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 

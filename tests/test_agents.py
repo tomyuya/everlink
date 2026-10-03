@@ -127,6 +127,102 @@ def test_run_scan_detection_only_needs_no_judge():
     assert len(report.problems()) >= 3                    # detection still works offline
 
 
+class _ThrowingJudge:
+    """A judge backend that dies on first contact (e.g. an account gate)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, *args, **kwargs):  # noqa: ARG002
+        self.calls += 1
+        raise RuntimeError("HTTP 400 corporate customer (allowlisting gate)")
+
+
+def test_run_scan_survives_judge_outage_with_detection_only():
+    judge = _ThrowingJudge()
+    report = agents.run_scan(f"{_base}/link-farm", limit=None, rate_delay=0.0,
+                             use_l2=True, judge=judge, judge_backend="mantle",
+                             include_internal=True)
+    assert report.judge_error is not None                 # honest about the outage
+    assert "RuntimeError" in report.judge_error
+    assert "corporate customer" not in report.judge_error
+    assert report.proposals == []                         # fail-fast: no proposals
+    assert judge.calls == 1                               # never hammers a dead endpoint
+    assert len(report.problems()) >= 3                    # detection results still stand
+
+
+# 仅此新增测试组用内存检测替身；上面的原始端到端 fixture 基线继续保留。
+import re
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+
+@pytest.fixture
+def detected_slots(monkeypatch):
+    slots = [_slot(f"https://example.invalid/{i}", id=f"s{i}") for i in range(4)]
+    checks = [CheckResult(slot_id=s.id, l1_status=200 if i == 2 else 404,
+                          final_verdict="healthy" if i == 2 else "dead")
+              for i, s in enumerate(slots)]
+    monkeypatch.setattr(agents.adapters, "extract_slots", lambda *a, **k: slots)
+    monkeypatch.setattr(agents.detect, "check_slots", lambda *a, **k: checks)
+    return slots, checks
+
+
+class _JudgeHTTPFailure(RuntimeError):
+    def __init__(self, status_code=None):
+        self.status_code = status_code
+        super().__init__(
+            "Authorization: Bearer synthetic-secret-token; "
+            "postgresql://synthetic-user:synthetic-password@example.invalid/private-db; "
+            "https://example.invalid/v1?api_key=synthetic-query-key\nresponse-private-body")
+
+
+class TestJudgeFailureContract:
+    def test_first_failure_preserves_every_check_without_fabricated_proposals(self, detected_slots):
+        slots, checks = detected_slots
+        judge = Mock(side_effect=_JudgeHTTPFailure(401))
+        report = agents.run_scan("synthetic", judge=judge, judge_backend="mantle", rate_delay=0)
+        assert report.scanned == len(slots)
+        assert report.slots == slots and report.checks == checks
+        assert report.proposals == []
+        assert report.judge_backend == "mantle" and report.judge_error
+        assert judge.call_count == 1
+
+    def test_midway_failure_keeps_prior_proposal_and_stops_judge(self, detected_slots):
+        slots, checks = detected_slots
+        proposal = Proposal(action="ESCALATE_HUMAN", rationale="synthetic", risk_level="high")
+        judge = Mock(side_effect=[SimpleNamespace(structured_output=proposal),
+                                  _JudgeHTTPFailure(401), AssertionError("不得第三次调用 Judge")])
+        report = agents.run_scan("synthetic", judge=judge, judge_backend="mantle", rate_delay=0)
+        assert report.checks == checks and report.slots == slots
+        assert len(report.proposals) == 1
+        assert report.proposals[0].slot.id == slots[0].id
+        assert report.proposals[0].proposal == proposal
+        assert judge.call_count == 2
+        assert report.judge_error
+
+    @pytest.mark.parametrize("status", [None, 401, 403, 429, 500])
+    def test_error_summary_contains_only_type_and_optional_safe_status(self, detected_slots, status):
+        report = agents.run_scan("synthetic", judge=Mock(side_effect=_JudgeHTTPFailure(status)))
+        summary = report.judge_error or ""
+        assert "_JudgeHTTPFailure" in summary
+        assert set(re.findall(r"[A-Za-z_]+", summary)) <= {
+            "_JudgeHTTPFailure", "HTTP", "status", "status_code"}
+        assert set(re.findall(r"\d+", summary)) <= ({str(status)} if status else set())
+        assert "synthetic" not in summary and "response-private-body" not in summary
+        assert "\n" not in summary
+
+    @pytest.mark.parametrize("status", [200, 999, "401 synthetic-status-secret"])
+    def test_untrusted_status_attribute_is_not_disclosed(self, detected_slots, status):
+        report = agents.run_scan("synthetic", judge=Mock(side_effect=_JudgeHTTPFailure(status)))
+        summary = report.judge_error or ""
+        assert "_JudgeHTTPFailure" in summary
+        assert str(status) not in summary
+        assert "synthetic" not in summary
+
+
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 

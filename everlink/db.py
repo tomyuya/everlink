@@ -95,11 +95,20 @@ def everlink_dsn() -> str:
 
 
 def connect(dsn: str, *, read_only: bool = False, connect_timeout: int = 20):
-    """Open a psycopg connection. read_only=True sets a session-level guard."""
+    """Open a psycopg connection. read_only=True sets a session-level guard.
+
+    When the read-only guard cannot be established the half-open connection is
+    closed BEFORE the error propagates, so a failed candidate never leaks a live
+    session that a caller might mistakenly reuse for writes.
+    """
     conn = psycopg.connect(dsn, connect_timeout=connect_timeout)
     if read_only:
-        with conn.cursor() as cur:
-            cur.execute("SET default_transaction_read_only = on")
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SET default_transaction_read_only = on")
+        except BaseException:
+            conn.close()
+            raise
     return conn
 
 

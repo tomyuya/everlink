@@ -201,6 +201,154 @@ def test_recheck_confirm_flag_is_registered():
     assert ap.parse_args(["recheck"]).confirm == 1
 
 
+# scan 的退出码合同与副作用边界；不实际连接 DB、模型或扫描源站。
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import psycopg
+import pytest
+
+
+@pytest.fixture
+def scan_io(monkeypatch):
+    from everlink import agents
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("scan 回归禁止未注入的 I/O")
+
+    monkeypatch.delenv("EVERLINK_DATABASE_URL", raising=False)
+    monkeypatch.setattr(db, "connect", forbidden)
+    monkeypatch.setattr(psycopg, "connect", forbidden)
+    monkeypatch.setattr(cli, "get_mantle_model", Mock(return_value=object()))
+    monkeypatch.setattr(cli, "get_model", Mock(return_value=object()))
+    monkeypatch.setattr(agents, "build_judge", Mock(return_value=object()))
+    monkeypatch.setattr(agents, "build_stub_judge", Mock(return_value=object()))
+    slots = [_slot("s1", "https://example.invalid/1"), _slot("s2", "https://example.invalid/2")]
+    checks = [CheckResult(slot_id=s.id, final_verdict="dead") for s in slots]
+    report = agents.ScanReport(source="synthetic", scanned=2, slots=slots, checks=checks,
+                               judge_backend="mantle")
+    scan = Mock(return_value=report)
+    monkeypatch.setattr(agents, "run_scan", scan)
+    real_persist = cli._persist
+    persist = Mock(return_value=(2, 0))
+    monkeypatch.setattr(cli, "_persist", persist)
+    return SimpleNamespace(report=report, scan=scan, persist=persist, real_persist=real_persist)
+
+
+def _scan_args(*argv):
+    return cli.build_parser().parse_args([
+        "scan", "--site", "hotdeals", "--judge", "mantle", "--rate-delay", "0", *argv])
+
+
+class TestScanExitContract:
+    @pytest.mark.parametrize("degraded,expected", [(False, 0), (True, 2)])
+    def test_scan_status_requires_successful_persistence(self, scan_io, degraded, expected):
+        scan_io.report.judge_error = "RuntimeError" if degraded else None
+        assert cli.cmd_scan(_scan_args()) == expected
+        scan_io.persist.assert_called_once()
+        saved = scan_io.persist.call_args.args[0]
+        assert saved.checks == scan_io.report.checks and saved.scanned == 2
+        assert cli.agents.build_judge.call_args.kwargs["enforce"] is True
+
+    @pytest.mark.parametrize("degraded,expected", [(False, 0), (True, 2)])
+    def test_dry_run_never_persists_even_when_degraded(self, scan_io, degraded, expected):
+        scan_io.report.judge_error = "RuntimeError" if degraded else None
+        assert cli.cmd_scan(_scan_args("--dry-run")) == expected
+        scan_io.persist.assert_not_called()
+
+    @pytest.mark.parametrize("degraded", [False, True])
+    def test_missing_dsn_is_failure_not_read_only_success(self, scan_io, monkeypatch, degraded):
+        scan_io.report.judge_error = "RuntimeError" if degraded else None
+        monkeypatch.setattr(cli, "_persist", scan_io.real_persist)
+        assert cli.cmd_scan(_scan_args()) == 1
+
+    @pytest.mark.parametrize("degraded", [False, True])
+    @pytest.mark.parametrize("error_type", [RuntimeError, db.ProductionWriteRefused,
+                                            psycopg.OperationalError])
+    def test_write_failures_override_judge_degradation(self, scan_io, degraded, error_type):
+        scan_io.report.judge_error = "RuntimeError" if degraded else None
+        scan_io.persist.side_effect = error_type("synthetic persistence failure")
+        assert cli.cmd_scan(_scan_args()) == 1
+        scan_io.persist.assert_called_once()
+
+    @pytest.mark.parametrize("backend", ["mantle", "bedrock"])
+    @pytest.mark.parametrize("boundary", ["model", "judge"])
+    def test_initialization_failure_still_detects_and_persists(self, scan_io, backend, boundary):
+        target = (cli.get_mantle_model if backend == "mantle" else cli.get_model)
+        if boundary == "judge":
+            target = cli.agents.build_judge
+        target.side_effect = RuntimeError("synthetic-private-init-error")
+        assert cli.cmd_scan(_scan_args("--judge", backend)) == 2
+        scan_io.scan.assert_called_once()
+        assert scan_io.scan.call_args.kwargs["judge"] is None
+        scan_io.persist.assert_called_once()
+        saved = scan_io.persist.call_args.args[0]
+        assert saved.checks == scan_io.report.checks
+        assert saved.judge_error and "synthetic-private-init-error" not in saved.judge_error
+
+    def test_initialization_error_output_never_contains_raw_secret(self, scan_io, capsys):
+        cli.get_mantle_model.side_effect = RuntimeError("synthetic-private-init-error")
+        cli.cmd_scan(_scan_args("--dry-run"))
+        captured = capsys.readouterr()
+        assert "synthetic-private-init-error" not in captured.out + captured.err
+        assert "RuntimeError" in captured.out + captured.err
+
+    def test_initialization_failure_and_write_failure_returns_one(self, scan_io):
+        cli.get_mantle_model.side_effect = RuntimeError("synthetic initialization failure")
+        scan_io.persist.side_effect = RuntimeError("synthetic persistence failure")
+        assert cli.cmd_scan(_scan_args()) == 1
+        scan_io.scan.assert_called_once()
+        scan_io.persist.assert_called_once()
+
+    def test_degraded_scan_enqueues_only_existing_pending_proposals(self, scan_io):
+        from everlink.agents import SlotProposal
+
+        scan_io.report.judge_error = "RuntimeError"
+        scan_io.report.proposals = [SlotProposal(
+            slot=scan_io.report.slots[0], check=scan_io.report.checks[0],
+            proposal=Proposal(action="ESCALATE_HUMAN", rationale="synthetic", risk_level="high"))]
+        assert cli.cmd_scan(_scan_args()) == 2
+        cards = scan_io.persist.call_args.args[2]
+        assert len(cards) == 1 and cards[0].status == "pending"
+        assert cards[0].affected_slot_ids == ["s1"]
+
+    def test_due_dry_run_uses_read_only_connection_without_schema(self, scan_io, monkeypatch):
+        conn = _FakeConn()
+        connect = Mock(return_value=conn)
+        schema = Mock()
+        monkeypatch.setattr(db, "everlink_dsn", lambda: "postgresql://test@example.invalid/own")
+        monkeypatch.setattr(db, "connect", connect)
+        monkeypatch.setattr(db, "ensure_schema", schema)
+        monkeypatch.setattr(db, "fetch_due_slots", Mock(return_value=scan_io.report.slots))
+        assert cli.cmd_scan(_scan_args("--select", "due", "--dry-run")) == 0
+        assert connect.call_args.kwargs.get("read_only") is True
+        schema.assert_not_called()
+        assert conn.closed
+        scan_io.persist.assert_not_called()
+        assert scan_io.scan.call_args.kwargs["preselected"] == scan_io.report.slots
+
+    @pytest.mark.parametrize("boundary", ["connect", "fetch"])
+    def test_due_read_failure_is_nonzero_and_closes_open_connection(self, scan_io, monkeypatch, boundary):
+        conn = _FakeConn()
+        monkeypatch.setattr(db, "everlink_dsn", lambda: "postgresql://test@example.invalid/own")
+        connect = Mock(return_value=conn)
+        fetch = Mock(return_value=scan_io.report.slots)
+        (connect if boundary == "connect" else fetch).side_effect = psycopg.OperationalError("synthetic")
+        monkeypatch.setattr(db, "connect", connect)
+        monkeypatch.setattr(db, "ensure_schema", Mock())
+        monkeypatch.setattr(db, "fetch_due_slots", fetch)
+        assert cli.cmd_scan(_scan_args("--select", "due", "--dry-run")) == 1
+        if boundary == "fetch":
+            assert conn.closed
+        scan_io.scan.assert_not_called()
+        scan_io.persist.assert_not_called()
+
+    def test_due_missing_dsn_returns_one(self, scan_io):
+        assert cli.cmd_scan(_scan_args("--select", "due")) == 1
+        scan_io.scan.assert_not_called()
+        scan_io.persist.assert_not_called()
+
+
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 

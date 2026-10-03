@@ -21,6 +21,8 @@ import sys
 import time
 from datetime import datetime, timezone
 
+import psycopg
+
 from . import agents, cards, hitl, notify, steering, writer
 from . import report as reporting
 from .llm import BedrockNotConfigured, get_model, get_mantle_model
@@ -101,25 +103,31 @@ def cmd_scan(args: argparse.Namespace) -> int:
     enforce = not args.no_enforce
     judge = None
     backend = "none"
+    # A judge backend that cannot be constructed (missing creds, token-mint failure,
+    # account gate, import error) must NOT abort the scan: detection needs no LLM, so
+    # we degrade to detection-only, still run + persist the probes, and report exit 2.
+    # The reason is redacted to the exception type name — never the raw message, which
+    # for Mantle/Bedrock carries the bearer token, request URL, DSN or response body.
+    init_error: str | None = None
     if args.judge == "stub":
-        judge = agents.build_stub_judge(audit_sink=audit, enforce=enforce)
         backend = "stub"
-    elif args.judge == "bedrock":
         try:
-            model = get_model()
-        except BedrockNotConfigured as e:
-            print(f"[everlink] Bedrock unavailable:\n{e}", file=sys.stderr)
-            return 2
-        judge = agents.build_judge(model, audit_sink=audit, enforce=enforce)
-        backend = "bedrock"
-    elif args.judge == "mantle":
+            judge = agents.build_stub_judge(audit_sink=audit, enforce=enforce)
+        except Exception as e:  # noqa: BLE001 - degrade to detection-only, never leak
+            init_error = agents._summarize_judge_error(e)
+            judge = None
+            print(f"[everlink] stub judge unavailable ({init_error}); "
+                  f"continuing detection-only.", file=sys.stderr)
+    elif args.judge in ("bedrock", "mantle"):
+        backend = args.judge
         try:
-            model = get_mantle_model()
-        except Exception as e:  # noqa: BLE001 - token-mint / import failures surface here
-            print(f"[everlink] Mantle unavailable:\n{e}", file=sys.stderr)
-            return 2
-        judge = agents.build_judge(model, audit_sink=audit, enforce=enforce)
-        backend = "mantle"
+            model = get_model() if args.judge == "bedrock" else get_mantle_model()
+            judge = agents.build_judge(model, audit_sink=audit, enforce=enforce)
+        except Exception as e:  # noqa: BLE001 - token-mint / import / account-gate
+            init_error = agents._summarize_judge_error(e)
+            judge = None
+            print(f"[everlink] {args.judge} judge unavailable ({init_error}); "
+                  f"continuing detection-only (no proposals this run).", file=sys.stderr)
 
     adapter_kwargs: dict = {}
     if args.max_pages is not None:
@@ -131,19 +139,26 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.select == "due":
         # Rotation mode: probe the least-recently-checked mirror rows instead of
         # the snapshot head, so a cycle of nightly runs covers EVERY slot once.
+        # This only READS the operational mirror, so it uses a read-only session
+        # (db.connect(read_only=True)) and never runs ensure_schema here.
         from . import db
         try:
             dsn = db.everlink_dsn()
-        except RuntimeError as e:
-            print(f"[everlink] --select due needs the operational DB:\n{e}",
-                  file=sys.stderr)
-            return 2
-        conn = db.connect(dsn)
+        except RuntimeError:
+            print("[everlink] --select due needs the operational DB "
+                  "(EVERLINK_DATABASE_URL is not set).", file=sys.stderr)
+            return 1
+        conn = None
         try:
-            db.ensure_schema(conn)
+            conn = db.connect(dsn, read_only=True)
             preselected = db.fetch_due_slots(conn, args.site, args.limit or 25)
+        except Exception as e:  # noqa: BLE001 - DB unreachable -> honest failure, not 0
+            print(f"[everlink] --select due could not read the operational DB "
+                  f"({type(e).__name__}); aborting.", file=sys.stderr)
+            return 1
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
         if not preselected:
             print(f"[1/2] due rotation: no active slots for '{args.site}' in the mirror "
                   f"yet (run a head scan first to populate link_slots).")
@@ -160,7 +175,21 @@ def cmd_scan(args: argparse.Namespace) -> int:
         timeout=args.timeout, use_l2=not args.no_l2,
         judge=judge, judge_backend=backend, preselected=preselected,
         **adapter_kwargs)
+    # A judge that failed to initialise is recorded on the report exactly like a
+    # mid-scan backend outage, so the degraded path below persists + exits 2.
+    if init_error and not report.judge_error:
+        report.judge_error = init_error
     _print_report(report)
+
+    # Honest degrade (spec §4.1): when the judge backend raises mid-scan, the
+    # detection results are still real — persist them and report exit 2 so the
+    # nightly ledger marks the step 'degraded', never silently 'ok' nor discard
+    # the probes (observed 2026-09-13: Bedrock account gate killed every scan
+    # step pre-persist, freezing rotation coverage).
+    if report.judge_error:
+        print(f"\n  [degraded] judge backend failed: {report.judge_error}")
+        print("             detection results will still be persisted; "
+              "no proposals this run.")
 
     if backend != "none":
         cancels = audit.events().count("steering_cancel")
@@ -178,16 +207,20 @@ def cmd_scan(args: argparse.Namespace) -> int:
               f"{len(decision_cards) - high} batchable).")
 
     if args.dry_run:
-        print("\n[2/2] --dry-run: nothing written to any database (read-only scan).")
-        return 0
+        print("\n[2/2] --dry-run: nothing written to any database.")
+        return 2 if report.judge_error else 0
+    # A non-dry-run scan MUST persist: a missing DSN, a write-guard refusal or any
+    # operational write failure is a hard failure (exit 1), never a silent success.
+    # This overrides a judge degradation — losing the probes is worse than no fix.
     try:
         n, enqueued = _persist(report, audit.records, decision_cards)
-    except RuntimeError as e:
-        print(f"\n[2/2] skipped persistence: {e}", file=sys.stderr)
-        return 0
+    except (RuntimeError, psycopg.Error) as e:
+        print(f"\n[2/2] persistence failed ({type(e).__name__}); nothing was "
+              f"written to EverLink's operational DB.", file=sys.stderr)
+        return 1
     print(f"\n[2/2] persisted {n} slot_checks (+{len(audit.records)} audit rows) and "
           f"enqueued {enqueued} decision card(s) [pending] to EverLink's operational DB.")
-    return 0
+    return 2 if report.judge_error else 0
 
 
 def cmd_decisions(args: argparse.Namespace) -> int:

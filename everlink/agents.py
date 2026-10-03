@@ -317,6 +317,35 @@ def build_writer(conn, model, *, is_approved: Optional[callable] = None,
                  conversation_manager=SlidingWindowConversationManager(window_size=20))
 
 
+# --------------------------------------------------------------------------- #
+# judge-error redaction (spec §4.1 honest degrade)
+# --------------------------------------------------------------------------- #
+# A judge backend failure is recorded on the ScanReport and surfaced to the CLI /
+# nightly ledger. That string can end up in logs, so it MUST NOT carry the raw
+# exception text: Mantle/Bedrock errors embed the bearer token, the request URL
+# (api_key query), the DSN or the response body. We keep ONLY the exception type
+# name plus, when present and safe, a whitelisted HTTP status code (the auth /
+# rate-limit / server-error classes an operator can act on). Anything else — the
+# message, headers, an untrusted or out-of-whitelist status — is dropped.
+_SAFE_JUDGE_STATUS = frozenset({401, 403, 429})
+
+
+def _summarize_judge_error(exc: BaseException) -> str:
+    """Redact a judge failure to ``TypeName`` + an optional safe HTTP status.
+
+    Never leaks ``str(exc)``, headers, DSN, body or any untrusted attribute. Only
+    401/403/429 and 5xx statuses are echoed; every other value (including a
+    non-int or out-of-range status the exception may carry) is omitted.
+    """
+    name = type(exc).__name__
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, bool) or not isinstance(code, int):
+        return name
+    if code in _SAFE_JUDGE_STATUS or 500 <= code <= 599:
+        return f"{name} (HTTP status {code})"
+    return name
+
+
 def _judge_prompt(slot: LinkSlot, check: CheckResult) -> str:
     chain = " -> ".join(f"{h.url} ({h.status})" for h in check.redirect_chain) or "(no redirects)"
     return (
@@ -378,6 +407,8 @@ class ScanReport(BaseModel):
     checks: list[CheckResult] = Field(default_factory=list)
     proposals: list[SlotProposal] = Field(default_factory=list)
     judge_backend: str = "none"          # none | stub | mantle | bedrock
+    judge_error: str | None = None       # set when the judge backend raised mid-scan
+                                         # (detection results still stand; honest degrade)
 
     def problems(self) -> list[CheckResult]:
         return [c for c in self.checks if c.final_verdict != "healthy"]
@@ -410,15 +441,25 @@ def run_scan(source, *, limit: Optional[int] = 25, rate_delay: float = 1.0,
     checks = detect.check_slots(slots, rate_delay=rate_delay, timeout=timeout, use_l2=use_l2)
 
     proposals: list[SlotProposal] = []
+    judge_error: str | None = None
     if judge is not None:
         by_id = {s.id: s for s in slots}
         for c in checks:
             if c.final_verdict == "healthy":
                 continue
             slot = by_id.get(c.slot_id)
-            if slot is not None:
-                proposals.append(SlotProposal(slot=slot, check=c,
-                                              proposal=judge_slot(judge, slot, c)))
+            if slot is None:
+                continue
+            if judge_error is not None:
+                break               # fail fast: the judge backend is down; never
+                                   # hammer a dead endpoint once per problem slot
+            try:
+                proposal = judge_slot(judge, slot, c)
+            except Exception as e:  # noqa: BLE001 - honest degrade, detection stands
+                judge_error = _summarize_judge_error(e)
+                break               # detection-only for the remaining problems
+            proposals.append(SlotProposal(slot=slot, check=c, proposal=proposal))
 
     return ScanReport(source=str(source), scanned=len(slots), slots=slots, checks=checks,
-                      proposals=proposals, judge_backend=judge_backend)
+                      proposals=proposals, judge_backend=judge_backend,
+                      judge_error=judge_error)
